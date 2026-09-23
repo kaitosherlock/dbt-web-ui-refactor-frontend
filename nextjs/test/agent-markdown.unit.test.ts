@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isBlockCode } from '@/components-v2/develop/agent/markdown-code'
+import { isBlockCode } from '@/components/develop/agent/markdown-code'
 
 describe('isBlockCode', () => {
   it('treats a fenced block as a block', () => {

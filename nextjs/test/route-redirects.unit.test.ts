@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import nextConfig from "../next.config"
-import { APP_NAVIGATION } from "@/components-v2/layout/navigation"
+import { APP_NAVIGATION } from "@/components/layout/navigation"
 
 // Runs+Schedules became /orchestrate and Connections+Sources became /data.
 // Dropping a redirect breaks every bookmark and every link in an old run
