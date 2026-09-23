@@ -6,6 +6,16 @@ Oracle/Dremio/Spark exist only as 1.x Python plugins).
 
 Run phases in order; one Codex session per phase; review + test between phases.
 
+**SCOPE: BACKEND ONLY (dbt-runner/).** Nothing under `nextjs/` is touched —
+no UI, no Prisma schema/migrations. Every "Frontend:" item below becomes an
+API/service endpoint only, and the frontend work is listed as a follow-up.
+Consequences:
+- Phase 2 (run-history enum) is **deferred**: the `run_command` enum is owned
+  by Prisma migrations in `nextjs/prisma`. Until then the backend keeps mapping
+  unknown commands to `run`.
+- Phase 5 adapters are complete in the backend but not selectable in
+  `ConnectionDialog.tsx` until the frontend follow-up.
+
 ## Rules for every phase (prepend to each prompt)
 
 ```
@@ -14,7 +24,7 @@ guide (Key decisions, Gotchas, Don't). Scope: only what this phase asks.
 Match surrounding code style and comment density. Every behaviour change gets
 a test. Before finishing run:
   cd dbt-runner && uv run pytest -q
-  cd nextjs && npm run test && npm run build
+Do not touch nextjs/ (backend-only scope).
 Report: files changed, tests added, anything skipped and why.
 ```
 

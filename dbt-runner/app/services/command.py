@@ -12,8 +12,85 @@ from typing import Dict, List, Optional, Tuple
 
 from app.config import settings
 from app.core.redis_client import get_redis
+from app.exceptions import DbtOperationError
+from app.services.dbt_environment import dbt_process_environment
 
 logger = logging.getLogger(__name__)
+
+
+def _subprocess_environment(
+    cmd: List[str], env: Optional[Dict[str, str]]
+) -> Dict[str, str]:
+    executable = Path(cmd[0]).name.lower() if cmd else ""
+    if executable in {"dbt", "dbt.exe"}:
+        return dbt_process_environment(env)
+    return {**os.environ, **(env or {})}
+
+
+ALLOWED_DBT_SUBCOMMANDS = frozenset(
+    {
+        "run",
+        "test",
+        "build",
+        "seed",
+        "snapshot",
+        "compile",
+        "show",
+        "docs",
+        "deps",
+        "clean",
+        "source",
+        "parse",
+        "ls",
+        "list",
+        "debug",
+        "run-operation",
+        "retry",
+        "clone",
+    }
+)
+
+DBT_PATH_FLAGS = frozenset(
+    {
+        "--project-dir",
+        "--profiles-dir",
+        "--target-path",
+        "--log-path",
+        "--state",
+        "--packages-install-path",
+        "--defer-state",
+    }
+)
+
+
+def validate_dbt_argv(argv: List[str]) -> List[str]:
+    """Validate client-built argv before server-owned path flags are appended."""
+    if len(argv) < 2 or argv[0] != "dbt":
+        raise DbtOperationError(
+            "command validation", "expected argv to start with a dbt subcommand"
+        )
+
+    subcommand = argv[1]
+    if subcommand not in ALLOWED_DBT_SUBCOMMANDS:
+        if subcommand == "init":
+            message = (
+                "dbt subcommand 'init' is not allowed here; "
+                "use the project initialization endpoint"
+            )
+        else:
+            message = f"dbt subcommand '{subcommand}' is not allowed"
+        raise DbtOperationError("command validation", message)
+
+    for token in argv[2:]:
+        for flag in DBT_PATH_FLAGS:
+            if token == flag or token.startswith(f"{flag}="):
+                raise DbtOperationError(
+                    "command validation",
+                    f"client-provided filesystem path flag '{flag}' is not allowed; "
+                    "dbt paths are managed by the server",
+                )
+
+    return argv
 
 
 class CommandService:
@@ -104,7 +181,7 @@ class CommandService:
         process = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=cwd,
-            env={**os.environ, **(env or {})},
+            env=_subprocess_environment(cmd, env),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -143,7 +220,7 @@ class CommandService:
         process = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=cwd,
-            env={**os.environ, **(env or {})},
+            env=_subprocess_environment(cmd, env),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

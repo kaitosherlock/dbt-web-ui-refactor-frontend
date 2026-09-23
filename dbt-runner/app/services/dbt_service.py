@@ -41,7 +41,11 @@ from app.models.dbt import (
     QueryRequest,
 )
 from app.models.docs import DocsGenerateRequest, DocsServeRequest
-from app.services.command import CommandService
+from app.services.command import CommandService, validate_dbt_argv
+from app.services.dbt_environment import (
+    DBT_PROFILE_SECRET_ENV,
+    sanitize_dbt_environment,
+)
 from app.services.dbt_worker import DbtWarmWorkerError, DbtWarmWorkerPool, warm_worker_pool
 from app.services.project import ProjectService
 from app.core import duckdb_resources
@@ -50,8 +54,6 @@ from ingest import lakehouse
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_ENV_VAR_NAME_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_")
-DBT_PROFILE_SECRET_ENV = "DBT_ENV_SECRET_DBT_CRAFT_CREDENTIAL"
 DBT_PROFILE_SECRET_PLACEHOLDER = "{{ env_var('DBT_ENV_SECRET_DBT_CRAFT_CREDENTIAL') }}"
 
 # The project's own connection is always this target, so a project that never
@@ -365,24 +367,6 @@ def build_adapter_config_from_dremio_source_row(
         "dremio_space": src_row["catalog"] or (f"@{username}" if username else "@dremio"),
         "threads": DEFAULT_THREADS["dremio"],
     }, True
-
-
-def sanitize_dbt_environment(raw_env: Optional[Dict[str, str]]) -> Dict[str, str]:
-    """Return validated dbt env vars from a client request."""
-    if not raw_env:
-        return {}
-
-    sanitized: Dict[str, str] = {}
-    for key, value in raw_env.items():
-        name = (key or "").strip()
-        if not name:
-            continue
-        if len(name) > 128 or (not name[0].isalpha() and name[0] != "_"):
-            continue
-        if any(char not in ALLOWED_ENV_VAR_NAME_CHARS for char in name):
-            continue
-        sanitized[name] = str(value)
-    return sanitized
 
 
 class DbtService:
@@ -961,8 +945,7 @@ class DbtService:
         env: Dict[str, str] = {}
         for row in result.mappings().all():
             name = str(row["name"])
-            if name not in sanitize_dbt_environment({name: ""}):
-                continue
+            sanitize_dbt_environment({name: ""})
             env[name] = decrypt_secret_or_plaintext(row["value_encrypted"])
         return env
 
@@ -1002,23 +985,6 @@ class DbtService:
         """
         total_start = time.perf_counter()
         phase_start = time.perf_counter()
-        project_path = self.project.get_path_or_raise(request.project_id)
-        logger.info(
-            "[DBT-PERF] command project_path project_id=%s elapsed_ms=%s",
-            request.project_id,
-            _elapsed_ms(phase_start),
-        )
-
-        profile_env: Dict[str, str] = {}
-        if session:
-            phase_start = time.perf_counter()
-            profile_env = await self._regenerate_profiles_from_db(session, request.project_id, project_path)
-            logger.info(
-                "[DBT-PERF] command profile_regen project_id=%s elapsed_ms=%s",
-                request.project_id,
-                _elapsed_ms(phase_start),
-            )
-
         # Parse command - handle both single command and full command string
         if " " in request.command:
             cmd_parts = shlex.split(request.command)
@@ -1044,21 +1010,24 @@ class DbtService:
         if request.flags:
             cmd.extend(request.flags)
 
-        # Strip any client-provided --profiles-dir (security: always use server path).
-        if "--profiles-dir" in cmd:
-            cleaned = []
-            skip_next = False
-            for token in cmd:
-                if skip_next:
-                    skip_next = False
-                    continue
-                if token == "--profiles-dir":
-                    skip_next = True
-                    continue
-                if token.startswith("--profiles-dir="):
-                    continue
-                cleaned.append(token)
-            cmd = cleaned
+        validate_dbt_argv(cmd)
+
+        project_path = self.project.get_path_or_raise(request.project_id)
+        logger.info(
+            "[DBT-PERF] command project_path project_id=%s elapsed_ms=%s",
+            request.project_id,
+            _elapsed_ms(phase_start),
+        )
+
+        profile_env: Dict[str, str] = {}
+        if session:
+            phase_start = time.perf_counter()
+            profile_env = await self._regenerate_profiles_from_db(session, request.project_id, project_path)
+            logger.info(
+                "[DBT-PERF] command profile_regen project_id=%s elapsed_ms=%s",
+                request.project_id,
+                _elapsed_ms(phase_start),
+            )
 
         # Add profiles dir
         cmd.extend(["--profiles-dir", str(project_path)])
@@ -1492,6 +1461,21 @@ class DbtService:
         """
         total_start = time.perf_counter()
         phase_start = time.perf_counter()
+        model_name = Path(request.model_path).stem
+        cmd = [
+            "dbt",
+            "compile",
+            "--select",
+            model_name,
+        ]
+        try:
+            cmd = append_target(cmd, request.target)
+        except InvalidTarget as exc:
+            return {"success": False, "model": model_name, "error": str(exc)}
+        if request.additional_args:
+            cmd.extend(shlex.split(request.additional_args))
+        validate_dbt_argv(cmd)
+
         project_path = self.project.get_path_or_raise(request.project_id)
         logger.info(
             "[DBT-PERF] compile project_path project_id=%s elapsed_ms=%s",
@@ -1507,7 +1491,6 @@ class DbtService:
                 request.project_id,
                 _elapsed_ms(phase_start),
             )
-        model_name = Path(request.model_path).stem
 
         # Use file lock to prevent concurrent compile on same project
         lock_wait_start = time.perf_counter()
@@ -1517,35 +1500,6 @@ class DbtService:
                 request.project_id,
                 _elapsed_ms(lock_wait_start),
             )
-            cmd = [
-                "dbt",
-                "compile",
-                "--select",
-                model_name,
-            ]
-            try:
-                cmd = append_target(cmd, request.target)
-            except InvalidTarget as exc:
-                return {"success": False, "model": model_name, "error": str(exc)}
-            if request.additional_args:
-                cmd.extend(shlex.split(request.additional_args))
-
-            # Strip any client-provided --profiles-dir (security: always use server path).
-            if "--profiles-dir" in cmd:
-                cleaned = []
-                skip_next = False
-                for token in cmd:
-                    if skip_next:
-                        skip_next = False
-                        continue
-                    if token == "--profiles-dir":
-                        skip_next = True
-                        continue
-                    if token.startswith("--profiles-dir="):
-                        continue
-                    cleaned.append(token)
-                cmd = cleaned
-
             cmd.extend(["--profiles-dir", str(project_path)])
             dbt_env = await self._build_dbt_environment(
                 session, request.project_id, user_id, request.environment_variables, profile_env
@@ -1675,10 +1629,6 @@ class DbtService:
         Returns:
             Dict with success, model, data, columns, row_count, execution_time
         """
-        project_path = self.project.get_path_or_raise(request.project_id)
-        profile_env: Dict[str, str] = {}
-        if session:
-            profile_env = await self._regenerate_profiles_from_db(session, request.project_id, project_path)
         model_name = Path(request.model_path).stem
 
         cmd = [
@@ -1706,22 +1656,12 @@ class DbtService:
             }
         if request.additional_args:
             cmd.extend(shlex.split(request.additional_args))
+        validate_dbt_argv(cmd)
 
-        # Strip any client-provided --profiles-dir (security: always use server path).
-        if "--profiles-dir" in cmd:
-            cleaned = []
-            skip_next = False
-            for token in cmd:
-                if skip_next:
-                    skip_next = False
-                    continue
-                if token == "--profiles-dir":
-                    skip_next = True
-                    continue
-                if token.startswith("--profiles-dir="):
-                    continue
-                cleaned.append(token)
-            cmd = cleaned
+        project_path = self.project.get_path_or_raise(request.project_id)
+        profile_env: Dict[str, str] = {}
+        if session:
+            profile_env = await self._regenerate_profiles_from_db(session, request.project_id, project_path)
 
         cmd.extend(["--profiles-dir", str(project_path)])
         dbt_env = await self._build_dbt_environment(
@@ -2330,8 +2270,6 @@ class DbtService:
             str(request.limit),
             "--output",
             "json",
-            "--profiles-dir",
-            str(project_path),
         ]
         try:
             cmd = append_target(cmd, request.target)
@@ -2343,6 +2281,8 @@ class DbtService:
                 "row_count": 0,
                 "error": str(exc),
             }
+        validate_dbt_argv(cmd)
+        cmd.extend(["--profiles-dir", str(project_path)])
         start_time = time.time()
         try:
             # A console query is a DuckDB instance doing work, so it takes a slot

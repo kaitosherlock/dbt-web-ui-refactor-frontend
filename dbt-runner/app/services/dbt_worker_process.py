@@ -19,16 +19,20 @@ from typing import Any
 
 from dbt.cli.main import dbtRunner
 
+from app.services.dbt_environment import dbt_process_environment
+
 
 def _run_dbt(args: list[str], cwd: str, env: dict[str, str]) -> dict[str, Any]:
     old_cwd = os.getcwd()
-    old_env: dict[str, str | None] = {key: os.environ.get(key) for key in env}
+    old_env = dict(os.environ)
     stdout_buffer = io.StringIO()
     stderr_buffer = io.StringIO()
 
     try:
         os.chdir(cwd)
-        os.environ.update(env)
+        process_env = dbt_process_environment(env)
+        os.environ.clear()
+        os.environ.update(process_env)
         runner = dbtRunner()
         with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
             result = runner.invoke(args)
@@ -48,11 +52,8 @@ def _run_dbt(args: list[str], cwd: str, env: dict[str, str]) -> dict[str, Any]:
         }
     finally:
         os.chdir(old_cwd)
-        for key, value in old_env.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
+        os.environ.clear()
+        os.environ.update(old_env)
 
 
 def main() -> int:
