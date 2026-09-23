@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from "@/common/ui/dialog"
 import { dbtApi } from "@/features/develop"
-import { createSchedule, updateSchedule, type RunCommandName, type ScheduleRow } from "@/features/orchestrate/api"
+import { createSchedule, updateSchedule, type RunCommandName, type ScheduleRow } from "../api"
 import { getProjectTargets } from "@/entities/target"
 
 const COMMANDS: { value: RunCommandName; label: string }[] = [

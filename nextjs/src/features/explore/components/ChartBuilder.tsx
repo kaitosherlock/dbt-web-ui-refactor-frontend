@@ -3,8 +3,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { getSession } from 'next-auth/react'
-import { chartRows, numericChartColumns, sandboxChartHtml } from '@/features/explore/model/query-chart'
-import { acceptsSeries, chartProblem, type BoardDiagnostic, type ChartDraft } from '@/features/explore/model/board'
+import { chartRows, numericChartColumns, sandboxChartHtml } from '../model/query-chart'
+import { acceptsSeries, chartProblem, type BoardDiagnostic, type ChartDraft } from '../model/board'
 import ChartFields from './ChartFields'
 
 export interface RenderedChart { html: string; yaml: string; warnings: BoardDiagnostic[]; renderer: string }

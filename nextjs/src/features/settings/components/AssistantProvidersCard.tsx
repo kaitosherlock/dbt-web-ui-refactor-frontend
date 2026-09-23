@@ -12,7 +12,7 @@ import { Input } from "@/common/ui/input"
 import {
   createProviderDraft, draftToProviderInput, validateProviderDraft,
   type ProviderDraft, type ProviderViewModel,
-} from "@/features/settings/model/ai-provider-form"
+} from "../model/ai-provider-form"
 
 interface ProviderPresetView {
   route: string

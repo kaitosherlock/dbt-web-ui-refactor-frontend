@@ -30,7 +30,7 @@ import {
     RotateCcw,
     ArrowUpDown,
 } from 'lucide-react';
-import { gitApi, type GitBranch as GitBranchInfo, type GitRemote } from '@/features/git/api';
+import { gitApi, type GitBranch as GitBranchInfo, type GitRemote } from '../api';
 import GitCredentialDialog, { type GitOperationType } from './GitCredentialDialog';
 
 interface FileChange {

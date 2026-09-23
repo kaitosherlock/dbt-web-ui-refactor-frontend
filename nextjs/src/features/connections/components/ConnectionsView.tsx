@@ -2,12 +2,12 @@
 
 import React, { useState, useEffect, useCallback } from "react"
 import { getConnections } from "@/entities/connection"
-import { deleteConnection, testConnectionById, getConnectionUsage, type ConnectionUsage } from "@/features/connections/api"
+import { deleteConnection, testConnectionById, getConnectionUsage, type ConnectionUsage } from "../api"
 import { Card, CardContent } from "@/common/ui/card"
 import { Button } from "@/common/ui/button"
 import { AlertCircle, CheckCircle2, Loader2, Pencil, PlugZap, Server, Trash2, X } from "lucide-react"
 import EmptyState from "@/common/components/EmptyState"
-import ConnectionDialog, { ExistingConnection } from "@/features/connections/components/ConnectionDialog"
+import ConnectionDialog, { ExistingConnection } from "./ConnectionDialog"
 import {
   AlertDialog,
   AlertDialogAction,

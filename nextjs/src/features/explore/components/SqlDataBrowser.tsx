@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { ChevronDown, ChevronRight, Database, Plus, RefreshCw, Search } from "lucide-react"
 import { Button } from "@/common/ui/button"
-import { columnExpression, type DataEntry } from "@/features/explore/model/explore-data"
+import { columnExpression, type DataEntry } from "../model/explore-data"
 
 interface Props {
   entries: DataEntry[]

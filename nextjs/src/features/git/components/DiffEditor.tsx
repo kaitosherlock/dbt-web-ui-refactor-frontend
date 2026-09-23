@@ -7,8 +7,8 @@
 
 import dynamic from 'next/dynamic';
 import { useEffect, useState, useCallback } from 'react';
-import { gitApi } from '@/features/git/api';
-import { buildGitShowHeadCommand } from '@/features/git/model/diffPath';
+import { gitApi } from '../api';
+import { buildGitShowHeadCommand } from '../model/diffPath';
 import { Loader2, GitCompare, X, RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const MonacoDiffEditor = dynamic(

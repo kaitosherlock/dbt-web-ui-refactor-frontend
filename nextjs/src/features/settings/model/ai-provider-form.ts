@@ -1,4 +1,4 @@
-import { CATALOG_ROUTES } from "@/features/settings/model/ai-provider-definitions"
+import { CATALOG_ROUTES } from "./ai-provider-definitions"
 
 export interface ProviderModelView {
   id: string

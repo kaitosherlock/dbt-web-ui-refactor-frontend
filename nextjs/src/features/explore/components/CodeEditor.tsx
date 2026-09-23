@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic"
 import { useCallback, useEffect, useRef } from "react"
 import type { editor, languages } from "monaco-editor"
-import { sqlSuggestions, type DataEntry } from "@/features/explore/model/explore-data"
+import { sqlSuggestions, type DataEntry } from "../model/explore-data"
 
 const Editor = dynamic(
   () => import("@/common/lib/monaco-loader").then(({ loadMonacoEditor }) => loadMonacoEditor()),

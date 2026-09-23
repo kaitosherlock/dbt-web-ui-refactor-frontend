@@ -3,14 +3,14 @@
 import React, { useCallback, useEffect, useRef, useState } from "react"
 import { History, Loader2, Play, Square } from "lucide-react"
 import { Button } from "@/common/ui/button"
-import { useIngestStream } from "@/features/ingest/hooks/useIngestStream"
+import { useIngestStream } from "../hooks/useIngestStream"
 import {
   cancelIngest,
   getIngestDbtSources,
   getIngestRunLogs,
   getIngestRuns,
   type IngestRunRow,
-} from "@/features/ingest/api"
+} from "../api"
 
 function formatDuration(ms: number | null): string {
   if (ms === null) return "—"

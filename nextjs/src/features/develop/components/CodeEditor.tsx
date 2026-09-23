@@ -3,8 +3,8 @@
 import dynamic from 'next/dynamic';
 import { useCallback, useRef } from 'react';
 import type { editor, languages } from 'monaco-editor';
-import type { DbtIntellisenseResponse } from '@/features/develop/api';
-import { getColumnQualifier, resolveColumnsForQualifier } from '@/features/develop/model/intellisense';
+import type { DbtIntellisenseResponse } from '../api';
+import { getColumnQualifier, resolveColumnsForQualifier } from '../model/intellisense';
 
 const Editor = dynamic(
     () => import('@/common/lib/monaco-loader').then(({ loadMonacoEditor }) => loadMonacoEditor()),

@@ -6,8 +6,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Markdown } from '@/features/assistant'
 import { dbtApi } from '@/features/develop'
 import { apiClient } from '@/common/api/client'
-import { metadataEntries, type DataEntry } from '@/features/explore/model/explore-data'
-import { BOARD_TEMPLATES, type TemplateField } from '@/features/explore/model/dashboard-guide'
+import { metadataEntries, type DataEntry } from '../model/explore-data'
+import { BOARD_TEMPLATES, type TemplateField } from '../model/dashboard-guide'
 import { cn } from '@/common/lib/utils'
 
 interface Reference {

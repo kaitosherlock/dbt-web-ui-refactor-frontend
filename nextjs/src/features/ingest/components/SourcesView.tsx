@@ -4,9 +4,9 @@ import React, { useCallback, useEffect, useState } from "react"
 import { Database, Loader2, Pencil, Plus, Trash2, RefreshCw, ArrowRight } from "lucide-react"
 import { Button } from "@/common/ui/button"
 import EmptyState from "@/common/components/EmptyState"
-import SourceDialog, { type ExistingSource } from "@/features/ingest/components/SourceDialog"
-import IngestRunPanel from "@/features/ingest/components/IngestRunPanel"
-import { deleteIngestSource, getIngestMeta, getIngestSources } from "@/features/ingest/api"
+import SourceDialog, { type ExistingSource } from "./SourceDialog"
+import IngestRunPanel from "./IngestRunPanel"
+import { deleteIngestSource, getIngestMeta, getIngestSources } from "../api"
 import { getProjects } from "@/entities/project"
 import {
   AlertDialog,

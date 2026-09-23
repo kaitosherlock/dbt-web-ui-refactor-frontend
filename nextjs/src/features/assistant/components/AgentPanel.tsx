@@ -9,8 +9,8 @@ import {
   useAgentStream,
   type AgentMessage,
   type AgentToolCall,
-} from "@/features/assistant/hooks/useAgentStream"
-import type { AgentHealth } from "@/features/assistant/hooks/useAgentAvailability"
+} from "../hooks/useAgentStream"
+import type { AgentHealth } from "../hooks/useAgentAvailability"
 import { Button } from "@/common/ui/button"
 import Markdown from "./Markdown"
 

@@ -15,7 +15,7 @@ import {
 import { Button } from "@/common/ui/button"
 import { Card, CardContent } from "@/common/ui/card"
 import EmptyState from "@/common/components/EmptyState"
-import ScheduleDialog from "@/features/orchestrate/components/ScheduleDialog"
+import ScheduleDialog from "./ScheduleDialog"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,7 +27,7 @@ import {
   AlertDialogTitle,
 } from "@/common/ui/alert-dialog"
 import { dbtApi } from "@/features/develop"
-import { deleteSchedule, getSchedules, updateSchedule, type ScheduleRow } from "@/features/orchestrate/api"
+import { deleteSchedule, getSchedules, updateSchedule, type ScheduleRow } from "../api"
 import { getProjects } from "@/entities/project"
 import { cn } from "@/common/lib/utils"
 

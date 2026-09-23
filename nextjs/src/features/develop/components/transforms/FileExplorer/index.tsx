@@ -10,7 +10,7 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { Search, Plus, Folder, Trash2, Pencil, RefreshCw, FolderPlus, X, Upload, FolderUp } from 'lucide-react';
 import FileTreeNode from './FileTreeNode';
 import InlineInput from './InlineInput';
-import { type FileNode } from '@/features/develop/types';
+import { type FileNode } from '../../../types';
 import { filesApi } from '@/entities/file/api';
 import { FileTypeIcon } from './fileIconTheme';
 import { createTargetPath, canMoveInto, pathsForDrag, joinPath } from './explorerUtils';

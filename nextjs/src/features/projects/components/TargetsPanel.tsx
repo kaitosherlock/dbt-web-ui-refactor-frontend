@@ -11,7 +11,7 @@ import {
   updateProjectTarget,
   type ProjectTargetRow,
 } from "@/entities/target"
-import ConnectionCheckDialog from "@/features/projects/components/ConnectionCheckDialog"
+import ConnectionCheckDialog from "./ConnectionCheckDialog"
 import { DEFAULT_DBT_TARGET } from "../types"
 import { apiClient } from '@/common/api/client'
 import type { Connection } from "@/entities/connection"
