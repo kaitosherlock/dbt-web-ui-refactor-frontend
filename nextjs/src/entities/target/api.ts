@@ -1,4 +1,4 @@
-import { apiFetch } from '@/common/api/client'
+import { apiClient, apiFetch } from '@/common/api/client'
 import type { ProjectTargetRow } from './types'
 
 /**
@@ -21,4 +21,10 @@ export async function updateProjectTarget(data: Record<string, unknown> & { id: 
 
 export async function deleteProjectTarget(id: string) {
   return apiFetch(`/api/targets?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export async function deleteTargetState(projectId: string, target: string) {
+  return apiClient.delete<{ success: boolean }>(
+    `/dbt/state/${encodeURIComponent(projectId)}/${encodeURIComponent(target)}`,
+  )
 }

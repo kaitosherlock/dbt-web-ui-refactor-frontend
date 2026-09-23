@@ -30,6 +30,9 @@ describe("dbt command args", () => {
     expect(buildDbtCommandWithArgs("compile --select orders", "", true)).toBe(
       "compile --select orders --full-refresh",
     );
+    expect(buildDbtCommandWithArgs("seed", "", true)).toBe(
+      "seed --full-refresh",
+    );
   });
 
   it("appends args to supported dbt commands", () => {

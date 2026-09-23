@@ -233,6 +233,12 @@ const RUN_COMMANDS = new Set<RunCommand>([
   'seed',
   'snapshot',
   'source_freshness',
+  'parse',
+  'ls',
+  'debug',
+  'run_operation',
+  'retry',
+  'clone',
 ])
 
 const MAX_SELECTOR_LENGTH = 500

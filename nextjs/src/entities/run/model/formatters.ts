@@ -1,5 +1,34 @@
 import type { DbtRun } from "../types"
 
+export function getCommandName(command: string): string {
+  if (command === "source_freshness") return "source freshness"
+  if (command === "run_operation") return "run-operation"
+  return command
+}
+
+export const COMMAND_LABELS: Record<string, string> = {
+  run: "dbt run",
+  build: "dbt build",
+  test: "dbt test",
+  compile: "dbt compile",
+  docs: "dbt docs generate",
+  deps: "dbt deps",
+  clean: "dbt clean",
+  seed: "dbt seed",
+  snapshot: "dbt snapshot",
+  source_freshness: "dbt source freshness",
+  parse: "dbt parse",
+  ls: "dbt ls",
+  debug: "dbt debug",
+  run_operation: "dbt run-operation",
+  retry: "dbt retry",
+  clone: "dbt clone",
+}
+
+export function formatCommandLabel(command: string): string {
+  return COMMAND_LABELS[command] || `dbt ${getCommandName(command)}`
+}
+
 export function formatDuration(ms: number | null | undefined): string {
   if (ms == null || !Number.isFinite(ms)) return "—"
   if (ms < 1000) return `${Math.round(ms)}ms`
@@ -29,8 +58,7 @@ export function shortHash(value: string | null | undefined): string {
 }
 
 export function getFullCommand(run: DbtRun): string {
-  // source_freshness is one enum value but two CLI words; showing the enum
-  // spelling makes the History row not match what was actually run.
-  const command = run.command === "source_freshness" ? "source freshness" : run.command
+  // source_freshness is one enum value but two CLI words; run_operation is run-operation.
+  const command = getCommandName(run.command)
   return `dbt ${command}${run.selector ? ` --select ${run.selector}` : ""}`
 }

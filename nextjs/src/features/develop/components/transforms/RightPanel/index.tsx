@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import { Play, CheckCircle, RefreshCw, Database, Save, Terminal, BookOpen, Package, Sprout, FileText, Plug, Trash2, Clock, Bot } from 'lucide-react';
+import { Play, CheckCircle, RefreshCw, Database, Save, Terminal, BookOpen, Package, Sprout, FileText, Plug, Trash2, Clock, Bot, Layers, Copy, SlidersHorizontal } from 'lucide-react';
 import DbtIcon from '@/common/components/icons/DbtIcon';
 import type { Connection } from '@/entities/connection';
 
@@ -29,6 +29,12 @@ interface RightPanelProps {
     /** Omitted when the deployment runs no assistant: no dead entry point. */
     onToggleAssistant?: () => void;
     assistantOpen?: boolean;
+    onOpenRunOptions?: () => void;
+    onRunBuildModified?: () => void;
+    onCloneState?: () => void;
+    hasActiveRunOptions?: boolean;
+    hasState?: boolean;
+    stateTarget?: string;
 }
 
 export default function RightPanel({
@@ -48,6 +54,12 @@ export default function RightPanel({
     deleteProjectLabel = 'Delete Project',
     onToggleAssistant,
     assistantOpen = false,
+    onOpenRunOptions,
+    onRunBuildModified,
+    onCloneState,
+    hasActiveRunOptions = false,
+    hasState,
+    stateTarget = 'dev',
 }: RightPanelProps) {
     const [dbtMenuOpen, setDbtMenuOpen] = useState(false);
 
@@ -57,10 +69,13 @@ export default function RightPanel({
             <div className="relative">
                 <button
                     onClick={() => setDbtMenuOpen(!dbtMenuOpen)}
-                    className="p-2 rounded hover:bg-[#F3F2F1] transition-colors border border-[#E6E6E6] hover:border-[#0078D4]"
+                    className="relative p-2 rounded hover:bg-[#F3F2F1] transition-colors border border-[#E6E6E6] hover:border-[#0078D4]"
                     title="dbt Commands"
                 >
                     <DbtIcon className="h-5 w-5" />
+                    {hasActiveRunOptions && (
+                        <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-[#107C10] ring-2 ring-white" />
+                    )}
                 </button>
 
                 {/* Dropdown Menu - Opens to the left */}
@@ -179,6 +194,79 @@ export default function RightPanel({
                                         <FileText className="h-4 w-4 text-[#0078D4]" />
                                         <span>{docsLoading ? 'Generating...' : 'Generate Docs'}</span>
                                     </button>
+
+                                    {/* State & Deferral Commands */}
+                                    <div className="my-1 border-t border-[#E6E6E6]" />
+                                    <button
+                                        onClick={() => {
+                                            if (hasState === false) return;
+                                            if (onRunBuildModified) {
+                                                onRunBuildModified();
+                                            } else {
+                                                onRunDbt('build --select state:modified+');
+                                            }
+                                            setDbtMenuOpen(false);
+                                        }}
+                                        disabled={hasState === false}
+                                        title={
+                                            hasState === false
+                                                ? `No state artifacts available for target '${stateTarget}'. Run build first.`
+                                                : `Build modified models (state:modified+) with defer to '${stateTarget}'`
+                                        }
+                                        className={`w-full px-3 py-2 text-sm text-left flex items-center gap-2 ${
+                                            hasState === false
+                                                ? 'opacity-40 cursor-not-allowed text-gray-400'
+                                                : 'hover:bg-[#F3F2F1] text-gray-800'
+                                        }`}
+                                    >
+                                        <Layers className="h-4 w-4 text-[#0078D4]" />
+                                        <span>Build modified</span>
+                                    </button>
+
+                                    {onCloneState && (
+                                        <button
+                                            onClick={() => {
+                                                if (hasState === false) return;
+                                                onCloneState();
+                                                setDbtMenuOpen(false);
+                                            }}
+                                            disabled={hasState === false}
+                                            title={
+                                                hasState === false
+                                                    ? `No state artifacts available for target '${stateTarget}'. Run build first.`
+                                                    : `Clone relations from state target '${stateTarget}'`
+                                            }
+                                            className={`w-full px-3 py-2 text-sm text-left flex items-center gap-2 ${
+                                                hasState === false
+                                                    ? 'opacity-40 cursor-not-allowed text-gray-400'
+                                                    : 'hover:bg-[#F3F2F1] text-gray-800'
+                                        }`}
+                                        >
+                                            <Copy className="h-4 w-4 text-emerald-700" />
+                                            <span>Clone from &lsquo;{stateTarget}&rsquo;</span>
+                                        </button>
+                                    )}
+
+                                    {onOpenRunOptions && (
+                                        <>
+                                            <div className="my-1 border-t border-[#E6E6E6]" />
+                                            <button
+                                                onClick={() => {
+                                                    onOpenRunOptions();
+                                                    setDbtMenuOpen(false);
+                                                }}
+                                                className="w-full px-3 py-2 text-sm text-left hover:bg-[#F3F2F1] flex items-center justify-between text-gray-800"
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <SlidersHorizontal className="h-4 w-4 text-[#0078D4]" />
+                                                    <span>Run Options...</span>
+                                                </div>
+                                                {hasActiveRunOptions && (
+                                                    <span className="h-2 w-2 rounded-full bg-[#107C10]" />
+                                                )}
+                                            </button>
+                                        </>
+                                    )}
                                     {onOpenDangerZone && (
                                         <>
                                             <div className="my-1 border-t border-[#E6E6E6]" />

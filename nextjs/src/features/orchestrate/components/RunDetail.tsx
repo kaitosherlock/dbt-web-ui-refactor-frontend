@@ -11,11 +11,13 @@ import {
   Download,
   GitCommit,
   Loader2,
+  RotateCcw,
   Search,
   Square,
   TerminalSquare,
   Timer,
 } from "lucide-react"
+import { dbtApi } from "@/features/develop"
 import { Button } from "@/common/ui/button"
 import { Input } from "@/common/ui/input"
 import {
@@ -262,13 +264,16 @@ export default function RunDetail({
   run,
   liveLogs,
   onCancel,
+  onRetry,
 }: {
   run: DbtRun
   liveLogs: string[]
   onCancel: () => Promise<void>
+  onRetry?: () => Promise<void>
 }) {
   const [tab, setTab] = useState<DetailTab>("overview")
   const [cancelling, setCancelling] = useState(false)
+  const [retrying, setRetrying] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const nodes = useMemo(() => buildNodes(run), [run])
   const logs = liveLogs.length > 0 ? liveLogs.join("\n") : run.logs || ""
@@ -291,6 +296,23 @@ export default function RunDetail({
     }
   }
 
+  const retry = async () => {
+    setRetrying(true)
+    setActionError(null)
+    try {
+      if (onRetry) {
+        await onRetry()
+      } else {
+        await dbtApi.retryRun(run.id)
+      }
+    } catch (error) {
+      // 409 message or other error shown as-is
+      setActionError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setRetrying(false)
+    }
+  }
+
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 lg:flex-row lg:items-start lg:justify-between">
@@ -306,6 +328,18 @@ export default function RunDetail({
           <Button type="button" variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(run.id)}><Copy /> Copy ID</Button>
           {run.results != null && (
             <Button type="button" variant="outline" size="sm" onClick={() => downloadTextFile(`dbt-run-${run.id}-run_results.json`, JSON.stringify(run.results, null, 2), "application/json")}><Download /> Artifact</Button>
+          )}
+          {run.status === "error" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={retry}
+              disabled={retrying}
+              className="border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+            >
+              {retrying ? <Loader2 className="animate-spin" /> : <RotateCcw />} Retry failed
+            </Button>
           )}
           {run.status === "running" && (
             <Button type="button" variant="destructive" size="sm" onClick={cancel} disabled={cancelling}>

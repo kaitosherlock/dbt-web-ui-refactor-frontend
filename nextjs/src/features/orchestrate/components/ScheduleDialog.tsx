@@ -26,6 +26,13 @@ const COMMANDS: { value: RunCommandName; label: string }[] = [
   { value: "compile", label: "dbt compile" },
   { value: "docs", label: "dbt docs generate" },
   { value: "deps", label: "dbt deps" },
+  { value: "clean", label: "dbt clean" },
+  { value: "parse", label: "dbt parse" },
+  { value: "ls", label: "dbt ls" },
+  { value: "debug", label: "dbt debug" },
+  { value: "run_operation", label: "dbt run-operation" },
+  { value: "retry", label: "dbt retry" },
+  { value: "clone", label: "dbt clone" },
 ]
 
 const PRESETS: { label: string; cron: string }[] = [

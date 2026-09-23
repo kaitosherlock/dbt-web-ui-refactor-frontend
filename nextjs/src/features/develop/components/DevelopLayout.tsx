@@ -25,10 +25,19 @@ import {
 } from "@/entities/project";
 import { filesApi, useFileWatcher, type FileWatcherEvent } from "@/entities/file";
 import { useDbtRunStream } from "@/entities/run";
+import { getProjectTargets } from "@/entities/target";
 import type { Connection } from "@/entities/connection";
-import { dbtApi } from "../api";
+import { dbtApi, type DbtRunStateTarget } from "../api";
 import { apiClient } from '@/common/api/client';
 import { buildDbtAdditionalArgs, buildDbtCommandWithArgs } from "../model/dbt-command-args";
+import {
+  type RunOptionsState,
+  buildRunOptionsPayload,
+  hasActiveRunOptions,
+  loadRunOptions,
+  saveRunOptions,
+} from "../model/run-options";
+import { RunOptionsDialog } from "./RunOptionsDialog";
 import { clearLegacyDevelopSession, loadDevelopSession, saveDevelopSession, type DevelopSessionState } from "../model/develop-session";
 import { useDbtIntellisense } from "../hooks/useDbtIntellisense";
 import { usePanelLayout } from "../hooks/usePanelLayout";
@@ -57,8 +66,6 @@ import {
   RightPanel,
 } from "./transforms";
 import { formatFile } from "./CodeEditor";
-import { Button } from "@/common/ui/button";
-import { Input } from "@/common/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -288,6 +295,9 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
   const [dbtArgsDialogOpen, setDbtArgsDialogOpen] = useState(false);
   const [dbtCommandArgs, setDbtCommandArgs] = useState("");
   const [dbtFullRefresh, setDbtFullRefresh] = useState(false);
+  const [runOptions, setRunOptions] = useState<RunOptionsState>({});
+  const [stateTargets, setStateTargets] = useState<DbtRunStateTarget[]>([]);
+  const [projectTargetNames, setProjectTargetNames] = useState<string[]>([]);
   // Which profiles.yml output every command in this project runs against.
   const [dbtTarget, setDbtTarget] = useState(DEFAULT_DBT_TARGET);
   const [environmentVariables, setEnvironmentVariables] = useState<DbtEnvironmentVariable[]>([]);
@@ -604,6 +614,52 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
     if (typeof window === "undefined" || !userId) return;
     localStorage.setItem(getDbtTargetStorageKey(projectId, userId), dbtTarget);
   }, [projectId, userId, dbtTarget]);
+
+  // Synchronize run options with local storage
+  useEffect(() => {
+    if (typeof window === "undefined" || !userId || !projectId) return;
+    const loaded = loadRunOptions(projectId, userId);
+    if (loaded && Object.keys(loaded).length > 0) {
+      setRunOptions(loaded);
+      if (loaded.full_refresh !== undefined) {
+        setDbtFullRefresh(Boolean(loaded.full_refresh));
+      }
+    }
+  }, [projectId, userId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !userId || !projectId) return;
+    saveRunOptions(projectId, userId, runOptions);
+  }, [projectId, userId, runOptions]);
+
+  // Load project targets and state targets
+  useEffect(() => {
+    if (!projectId) return;
+    let isMounted = true;
+    void dbtApi
+      .listState(projectId)
+      .then((res) => {
+        if (isMounted && res?.targets) setStateTargets(res.targets);
+      })
+      .catch(() => {
+        if (isMounted) setStateTargets([]);
+      });
+    void getProjectTargets(projectId)
+      .then((targets) => {
+        if (isMounted && targets) setProjectTargetNames(targets.map((t) => t.name));
+      })
+      .catch(() => {
+        if (isMounted) setProjectTargetNames([]);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [projectId]);
+
+  const effectiveStateTarget = runOptions.state_target || dbtTarget || DEFAULT_DBT_TARGET;
+  const hasStateForTarget = Boolean(
+    stateTargets.find((s) => s.target === effectiveStateTarget)?.manifest,
+  );
 
   useEffect(() => {
     if (!userId) return;
@@ -977,40 +1033,127 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
     }
   };
 
-  const handleRunDbt = async (command: string) => {
+  const handleRunDbt = async (command: string, customOptions?: Partial<RunOptionsState>) => {
     if (!claimCommandSlot()) return;
     const dbtEnvironment = toEnvironmentPayload(environmentVariables);
-    const commandWithArgs = buildDbtCommandWithArgs(command, dbtCommandArgs, dbtFullRefresh, dbtTarget);
+    // Send options as request fields, never as raw CLI flags in command string.
+    // Keep --target appended only in buildDbtCommandWithArgs.
+    const commandWithTarget = buildDbtCommandWithArgs(command, "", false, dbtTarget);
+    const effectiveOptions: RunOptionsState = {
+      ...runOptions,
+      full_refresh: dbtFullRefresh || runOptions.full_refresh,
+      ...(customOptions || {}),
+    };
+    const optionsPayload = buildRunOptionsPayload(effectiveOptions, command);
+
     setTerminalOpen(true);
     setTerminalTab("logs");
     setTerminalOutput((prev) => [...prev, "[INFO] Connecting to dbt-runner..."]);
     const connected = await dbtRunStream.connect();
     if (!connected) {
-      setTerminalOutput((prev) => [...prev, "[WARN] Log stream unavailable, falling back to the HTTP API...", `$ dbt ${commandWithArgs}`, "Running..."]);
+      setTerminalOutput((prev) => [
+        ...prev,
+        "[WARN] Log stream unavailable, falling back to the HTTP API...",
+        `$ dbt ${commandWithTarget}`,
+        "Running...",
+      ]);
       setIsCommandRunning(true);
       try {
-        const data = await dbtApi.runCommand(projectId, commandWithArgs, dbtEnvironment);
+        const data = await dbtApi.runCommand(
+          projectId,
+          commandWithTarget,
+          dbtEnvironment,
+          undefined,
+          optionsPayload,
+        );
         if (data.success) {
           const lines = data.stdout.split("\n").filter((l: string) => l.trim());
           setTerminalOutput((prev) => [...prev, ...lines]);
-          if (/^(parse|compile|docs|build|run)\b/.test(commandWithArgs)) {
+          if (/^(parse|compile|docs|build|run)\b/.test(commandWithTarget)) {
             await refreshDbtIntellisense();
           }
         } else {
-          if (data.stderr) setTerminalOutput((prev) => [...prev, "--- STDERR ---", ...data.stderr.split("\n").filter((l: string) => l.trim())]);
-          if (data.stdout) setTerminalOutput((prev) => [...prev, "--- STDOUT ---", ...data.stdout.split("\n").filter((l: string) => l.trim())]);
+          if (data.stderr)
+            setTerminalOutput((prev) => [
+              ...prev,
+              "--- STDERR ---",
+              ...data.stderr.split("\n").filter((l: string) => l.trim()),
+            ]);
+          if (data.stdout)
+            setTerminalOutput((prev) => [
+              ...prev,
+              "--- STDOUT ---",
+              ...data.stdout.split("\n").filter((l: string) => l.trim()),
+            ]);
         }
       } catch (err) {
-        setTerminalOutput((prev) => [...prev, `Error: ${(err as Error).message || "Network error"}`]);
+        setTerminalOutput((prev) => [
+          ...prev,
+          `Error: ${(err as Error).message || "Network error"}`,
+        ]);
       } finally {
         setIsCommandRunning(false);
       }
       return;
     }
-    activeDbtCommandRef.current = commandWithArgs;
+    activeDbtCommandRef.current = commandWithTarget;
     setIsCommandRunning(true);
     setTerminalOutput((prev) => [...prev, "[INFO] Connected via SSE"]);
-    dbtRunStream.sendCommand(commandWithArgs, undefined, dbtEnvironment);
+    dbtRunStream.sendCommand(
+      commandWithTarget,
+      undefined,
+      dbtEnvironment,
+      undefined,
+      optionsPayload as Record<string, unknown>,
+    );
+  };
+
+  const handleRunBuildModified = async (stateTarget?: string) => {
+    const target = stateTarget || effectiveStateTarget;
+    await handleRunDbt("build --select state:modified+", {
+      state_target: target,
+      defer: true,
+    });
+  };
+
+  const handleCloneState = async (
+    stateTarget?: string,
+    defer?: boolean,
+    favorState?: boolean,
+  ) => {
+    if (!claimCommandSlot()) return;
+    const target = stateTarget || effectiveStateTarget;
+    setTerminalOpen(true);
+    setTerminalTab("logs");
+    const dbtEnvironment = toEnvironmentPayload(environmentVariables);
+    setTerminalOutput((prev) => [
+      ...prev,
+      `$ dbt clone --state ${target}${dbtTarget && dbtTarget !== target ? ` --target ${dbtTarget}` : ""}`,
+      `[INFO] Launching dbt clone from state target '${target}'...`,
+    ]);
+    setIsCommandRunning(true);
+    try {
+      const res = await dbtApi.cloneState({
+        project_id: projectId,
+        state_target: target,
+        target: dbtTarget !== target ? dbtTarget : undefined,
+        defer: defer ?? runOptions.defer,
+        favor_state: favorState ?? runOptions.favor_state,
+        environment_variables: dbtEnvironment,
+      });
+      setTerminalOutput((prev) => [
+        ...prev,
+        `[INFO] Clone run queued successfully (run ID: ${res.run_id || res.id})`,
+        `[INFO] Head to Orchestrate > History to monitor this background run.`,
+      ]);
+    } catch (err) {
+      setTerminalOutput((prev) => [
+        ...prev,
+        `[ERROR] Clone failed: ${(err as Error).message || "Unknown error"}`,
+      ]);
+    } finally {
+      setIsCommandRunning(false);
+    }
   };
 
 
@@ -2002,6 +2145,7 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
             isSaving={isSaving}
             dbtCommandArgs={dbtCommandArgs}
             dbtFullRefresh={dbtFullRefresh}
+            hasActiveRunOptions={hasActiveRunOptions(runOptions)}
             dbtIntellisense={dbtIntellisense}
             intellisenseLoading={intellisenseLoading}
             intellisenseError={intellisenseError}
@@ -2082,57 +2226,33 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
           deleteProjectLabel={project.deleted_at ? "Delete Permanently" : "Delete Project"}
           onToggleAssistant={agent.available ? () => setAgentOpen((open) => !open) : undefined}
           assistantOpen={agentOpen}
+          onOpenRunOptions={() => setDbtArgsDialogOpen(true)}
+          onRunBuildModified={() => void handleRunBuildModified(effectiveStateTarget)}
+          onCloneState={() => void handleCloneState(effectiveStateTarget)}
+          hasActiveRunOptions={hasActiveRunOptions(runOptions)}
+          hasState={hasStateForTarget}
+          stateTarget={effectiveStateTarget}
         />
       </div>
 
-      {dbtArgsDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-xl rounded-lg bg-white shadow-xl">
-            <div className="border-b border-gray-200 px-5 py-4">
-              <div className="flex items-center gap-2">
-                <SlidersHorizontal className="h-5 w-5 text-[#0078D4]" />
-                <h2 className="text-base font-semibold text-gray-900">dbt Command Arguments</h2>
-              </div>
-            </div>
-
-            <div className="px-5 py-4">
-              <label className="text-sm font-medium text-gray-700" htmlFor="dbt-command-args">
-                Extra arguments for Preview, Run, and Compile
-              </label>
-              <Input
-                id="dbt-command-args"
-                value={dbtCommandArgs}
-                onChange={(event) => setDbtCommandArgs(event.target.value)}
-                className="mt-2"
-                placeholder={`--full-refresh --vars '{"key":"value"}'`}
-              />
-              <p className="mt-2 text-xs text-gray-500">
-                These arguments are appended to dbt show, dbt run, and dbt compile commands for this project.
-              </p>
-
-              <label className="mt-4 flex items-start gap-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-3">
-                <input
-                  type="checkbox"
-                  checked={dbtFullRefresh}
-                  onChange={(event) => setDbtFullRefresh(event.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[#0078D4] focus:ring-[#0078D4]"
-                />
-                <span>
-                  <span className="block text-sm font-medium text-gray-800">Full refresh</span>
-                  <span className="mt-1 block text-xs text-gray-500">
-                    Appends --full-refresh to Preview, Run, Build, and Compile even if the extra args field is empty.
-                  </span>
-                </span>
-              </label>
-            </div>
-
-            <div className="flex justify-between gap-2 border-t border-gray-200 px-5 py-4">
-              <Button variant="outline" onClick={() => { setDbtCommandArgs(""); setDbtFullRefresh(false); }}>Clear</Button>
-              <Button onClick={() => setDbtArgsDialogOpen(false)}>Done</Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <RunOptionsDialog
+        open={dbtArgsDialogOpen}
+        onClose={() => setDbtArgsDialogOpen(false)}
+        projectId={projectId}
+        activeTarget={dbtTarget}
+        availableTargets={projectTargetNames}
+        runOptions={runOptions}
+        onOptionsChange={(newOptions) => {
+          setRunOptions(newOptions);
+          if (newOptions.full_refresh !== undefined) {
+            setDbtFullRefresh(Boolean(newOptions.full_refresh));
+          }
+        }}
+        onRunBuildModified={(target) => void handleRunBuildModified(target)}
+        onCloneFromTarget={(target, defer, favorState) =>
+          void handleCloneState(target, defer, favorState)
+        }
+      />
 
       {/* Dialogs */}
       <GitCredentialDialog

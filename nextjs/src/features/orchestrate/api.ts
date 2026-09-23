@@ -15,6 +15,12 @@ export type RunCommandName =
   | 'seed'
   | 'snapshot'
   | 'source_freshness'
+  | 'parse'
+  | 'ls'
+  | 'debug'
+  | 'run_operation'
+  | 'retry'
+  | 'clone'
 
 export interface ScheduleRow {
   id: string

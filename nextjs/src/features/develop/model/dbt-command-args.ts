@@ -1,5 +1,5 @@
-const COMMANDS_WITH_EXTRA_ARGS = new Set(["build", "compile", "run", "show"]);
-const COMMANDS_WITH_FULL_REFRESH = new Set(["build", "compile", "run", "show"]);
+const COMMANDS_WITH_EXTRA_ARGS = new Set(["build", "clone", "compile", "run", "seed", "show"]);
+const COMMANDS_WITH_FULL_REFRESH = new Set(["build", "clone", "compile", "run", "seed", "show"]);
 
 /**
  * A target name becomes a `--target` argument and a profiles.yml output key.

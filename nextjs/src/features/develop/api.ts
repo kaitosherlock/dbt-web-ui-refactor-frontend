@@ -39,7 +39,42 @@ export interface CronPreviewResponse {
     next_runs: string[];
 }
 
-export interface DbtCommandRequest {
+export interface DbtRunStateTarget {
+    target: string;
+    manifest: boolean;
+    run_results: boolean;
+    updated_at: string;
+}
+
+export interface DbtStateResponse {
+    project_id: string;
+    targets: DbtRunStateTarget[];
+}
+
+export interface DbtCloneRequest {
+    project_id: string;
+    state_target: string;
+    target?: string;
+    selector?: string;
+    defer?: boolean;
+    favor_state?: boolean;
+    environment_variables?: Record<string, string>;
+}
+
+export interface DbtRunOptionsPayload {
+    vars?: Record<string, unknown>;
+    empty?: boolean;
+    sample?: string;
+    event_time_start?: string;
+    event_time_end?: string;
+    full_refresh?: boolean;
+    selector_name?: string;
+    state_target?: string;
+    defer?: boolean;
+    favor_state?: boolean;
+}
+
+export interface DbtCommandRequest extends DbtRunOptionsPayload {
     project_id: string;
     command: string;
     selector?: string;
@@ -224,13 +259,52 @@ export const dbtApi = {
     /**
      * Execute a dbt command (run, test, build, compile, etc.)
      */
-    runCommand: (projectId: string, command: string, environmentVariables?: Record<string, string>, flags?: string[]) =>
+    runCommand: (
+        projectId: string,
+        command: string,
+        environmentVariables?: Record<string, string>,
+        flags?: string[],
+        options?: DbtRunOptionsPayload,
+    ) =>
         apiClient.post<DbtCommandResponse>('/dbt/command', {
             project_id: projectId,
             command,
             flags,
             environment_variables: environmentVariables,
+            ...options,
         }),
+
+    /**
+     * List named targets whose state artifacts are available.
+     */
+    listState: (projectId: string) =>
+        apiClient.get<DbtStateResponse>(`/dbt/state/${encodeURIComponent(projectId)}`),
+
+    /**
+     * Delete state artifacts for a target.
+     */
+    deleteTargetState: (projectId: string, target: string) =>
+        apiClient.delete<{ success: boolean; project_id: string; target: string; deleted: boolean }>(
+            `/dbt/state/${encodeURIComponent(projectId)}/${encodeURIComponent(target)}`,
+        ),
+
+    /**
+     * Retry failed nodes from the latest dbt run.
+     */
+    retryRun: (runId: string, environmentVariables?: Record<string, string>) =>
+        apiClient.post<{ id: string; run_id: string; project_id: string; status: string; started_at: string }>(
+            `/dbt/runs/${encodeURIComponent(runId)}/retry`,
+            { environment_variables: environmentVariables },
+        ),
+
+    /**
+     * Clone state from another target.
+     */
+    cloneState: (request: DbtCloneRequest) =>
+        apiClient.post<{ id: string; run_id: string; project_id: string; status: string; started_at: string }>(
+            '/dbt/runs/clone',
+            request,
+        ),
 
     /**
      * Start a run in the background and return its id. Same path the scheduler

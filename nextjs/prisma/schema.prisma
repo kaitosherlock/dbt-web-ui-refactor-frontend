@@ -173,6 +173,12 @@ enum RunCommand {
   seed
   snapshot
   source_freshness
+  parse
+  ls
+  debug
+  run_operation
+  retry
+  clone
 
   @@map("run_command")
 }

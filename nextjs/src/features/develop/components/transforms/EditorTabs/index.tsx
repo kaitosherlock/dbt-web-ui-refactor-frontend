@@ -45,6 +45,7 @@ interface EditorTabsProps {
     isSaving?: boolean;  // Show saving indicator when true
     dbtCommandArgs?: string;
     dbtFullRefresh?: boolean;
+    hasActiveRunOptions?: boolean;
     dbtIntellisense?: DbtIntellisenseResponse | null;
     intellisenseLoading?: boolean;
     intellisenseError?: string | null;
@@ -76,6 +77,7 @@ export default function EditorTabs({
     isSaving: _isSaving = false,
     dbtCommandArgs = '',
     dbtFullRefresh = false,
+    hasActiveRunOptions,
     dbtIntellisense,
     intellisenseLoading = false,
     intellisenseError,
@@ -96,7 +98,9 @@ export default function EditorTabs({
     const isSQLFile = activePath
         ? activePath.toLowerCase().endsWith('.sql') || (activeTab?.name || '').toLowerCase().endsWith('.sql')
         : false;
-    const hasDbtArgs = dbtCommandArgs.trim().length > 0 || dbtFullRefresh;
+    const hasDbtArgs = hasActiveRunOptions !== undefined
+        ? hasActiveRunOptions
+        : dbtCommandArgs.trim().length > 0 || dbtFullRefresh;
 
     return (
         <>
@@ -224,9 +228,9 @@ export default function EditorTabs({
                                             ? 'bg-[#0078D4]/10 text-[#0078D4] hover:bg-[#0078D4]/15'
                                             : 'hover:bg-[#E6E6E6] text-[#616161]'
                                             }`}
-                                        title={hasDbtArgs ? `dbt args enabled: ${[dbtCommandArgs, dbtFullRefresh ? '--full-refresh' : ''].filter(Boolean).join(' ')}` : 'Set dbt arguments'}
+                                        title={hasDbtArgs ? 'dbt run options active' : 'Set dbt run options'}
                                     >
-                                        <SlidersHorizontal className="h-4 w-4" /> Args
+                                        <SlidersHorizontal className="h-4 w-4" /> Options
                                         {hasDbtArgs && (
                                             <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-[#107C10]" />
                                         )}

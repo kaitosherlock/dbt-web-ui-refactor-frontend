@@ -15,8 +15,10 @@ import {
 import EmptyState from "@/common/components/EmptyState"
 import RunDetail from "./RunDetail"
 import RunStatusBadge from "@/entities/run/components/RunStatusBadge"
-import { formatDateTime, formatDuration, getFullCommand, shortHash } from "@/entities/run/model/formatters"
+import RunCommandIcon from "@/entities/run/components/RunCommandIcon"
+import { formatDateTime, formatDuration, getFullCommand, formatCommandLabel, shortHash } from "@/entities/run/model/formatters"
 import type { DbtRun, DbtRunStreamEvent, RunLogDashboardResponse } from "@/entities/run/types"
+import { dbtApi } from "@/features/develop"
 import { Button } from "@/common/ui/button"
 import { Card, CardContent } from "@/common/ui/card"
 import { Input } from "@/common/ui/input"
@@ -24,7 +26,24 @@ import { getDbtRunnerUrl } from '@/common/api/client'
 import { cn } from "@/common/lib/utils"
 
 const PAGE_SIZES = [10, 25, 50, 100]
-const COMMANDS = ["run", "test", "build", "compile", "docs", "deps", "clean", "seed", "snapshot", "source_freshness"]
+const COMMANDS = [
+  "run",
+  "build",
+  "test",
+  "compile",
+  "docs",
+  "deps",
+  "clean",
+  "seed",
+  "snapshot",
+  "source_freshness",
+  "parse",
+  "ls",
+  "debug",
+  "run_operation",
+  "retry",
+  "clone",
+]
 const STATUS_OPTIONS = ["running", "error", "success", "cancelled", "pending"]
 const EMPTY_DASHBOARD: RunLogDashboardResponse = {
   items: [],
@@ -232,6 +251,15 @@ export default function RunsView({ navigation }: { navigation?: React.ReactNode 
     await Promise.all([fetchDashboard(true), fetchDetail(runId)])
   }
 
+  const retryRun = async (runId: string) => {
+    const res = await dbtApi.retryRun(runId)
+    await fetchDashboard(true)
+    const newId = res.run_id || res.id
+    if (newId) {
+      selectRun(newId)
+    }
+  }
+
   const refreshAll = async () => {
     await fetchDashboard(true)
     if (selectedId) await fetchDetail(selectedId)
@@ -290,7 +318,7 @@ export default function RunsView({ navigation }: { navigation?: React.ReactNode 
             </select>
             <select value={command} onChange={(event) => setFilter(setCommand, event.target.value)} className="h-8 min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20" aria-label="Filter by dbt command">
               <option value="">All commands</option>
-              {COMMANDS.map((value) => <option key={value} value={value}>dbt {value}</option>)}
+              {COMMANDS.map((value) => <option key={value} value={value}>{formatCommandLabel(value)}</option>)}
             </select>
             <select value={range} onChange={(event) => setFilter(setRange, event.target.value)} className="h-8 min-w-0 max-w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20" aria-label="Filter by time range">
               <option value="24h">Last 24 hours</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="90d">Last 90 days</option><option value="all">All time</option>
@@ -334,7 +362,10 @@ export default function RunsView({ navigation }: { navigation?: React.ReactNode 
                         </td>
                         <td className="px-3 py-2">
                           <button type="button" onClick={() => selectRun(run.id)} className="max-w-sm text-left">
-                            <code className="block truncate rounded bg-slate-100 px-2 py-1 font-mono text-xs font-medium text-slate-700" title={getFullCommand(run)}>dbt {run.command}</code>
+                            <code className="inline-flex items-center gap-1.5 truncate rounded bg-slate-100 px-2 py-1 font-mono text-xs font-medium text-slate-700" title={getFullCommand(run)}>
+                              <RunCommandIcon command={run.command} className="h-3.5 w-3.5 text-slate-500" />
+                              <span>{formatCommandLabel(run.command)}</span>
+                            </code>
                             {run.selector && <p className="mt-1 max-w-sm truncate font-mono text-xs text-slate-400" title={run.selector}>--select {run.selector}</p>}
                           </button>
                         </td>
@@ -379,7 +410,7 @@ export default function RunsView({ navigation }: { navigation?: React.ReactNode 
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{detailError}</div>
         )}
         {detail && !detailLoading && detail.id === selectedId && (
-          <RunDetail run={detail} liveLogs={liveLogs} onCancel={() => cancelRun(detail.id)} />
+          <RunDetail run={detail} liveLogs={liveLogs} onCancel={() => cancelRun(detail.id)} onRetry={() => retryRun(detail.id)} />
         )}
 
       </div>
