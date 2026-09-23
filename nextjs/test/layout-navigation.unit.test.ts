@@ -25,7 +25,7 @@ describe("layout navigation", () => {
     // Settings is reached from the avatar menu; without a secondary entry the
     // top bar would fall back to "Workspace" on /settings.
     const { APP_NAVIGATION } = await import("@/common/layout/navigation")
-    expect(APP_NAVIGATION.some((item) => item.href === "/settings")).toBe(false)
+    expect(APP_NAVIGATION.some((item) => (item.href as string) === "/settings")).toBe(false)
     expect(getPageLabel("/settings")).toBe("Settings")
   })
 

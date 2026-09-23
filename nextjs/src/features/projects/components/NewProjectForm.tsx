@@ -11,6 +11,11 @@ import { Button } from "@/common/ui/button"
 import { Card } from "@/common/ui/card"
 import { Input } from "@/common/ui/input"
 import { Textarea } from "@/common/ui/textarea"
+import {
+  formatTemplateLabel,
+  formatTemplateDescription,
+  resolveInitialTemplate,
+} from "../model/init-templates"
 
 interface AnyConnection {
   id: string
@@ -74,10 +79,13 @@ export default function NewProjectForm() {
   const [error, setError] = useState("")
   const [creationStep, setCreationStep] = useState<CreationStep>("idle")
   const [connections, setConnections] = useState<AnyConnection[]>([])
+  const [templates, setTemplates] = useState<string[]>(["empty"])
+  const [defaultTemplate, setDefaultTemplate] = useState("empty")
   const [formData, setFormData] = useState({
     name: "",
     description: "",
     project_type: "git_clone" as "git_clone" | "dbt_init",
+    init_template: "empty",
     git_url: "",
     git_branch: "main",
     git_username: "",
@@ -94,6 +102,21 @@ export default function NewProjectForm() {
       .then((r) => r.json())
       .then((data) => setConnections(Array.isArray(data) ? data : []))
       .catch((e) => console.error("Error loading connections:", e))
+
+    dbtApi
+      .listInitTemplates()
+      .then((res) => {
+        if (res?.templates && Array.isArray(res.templates)) {
+          setTemplates(res.templates)
+          const def = res.default || "empty"
+          setDefaultTemplate(def)
+          setFormData((prev) => ({
+            ...prev,
+            init_template: resolveInitialTemplate(res.templates, def),
+          }))
+        }
+      })
+      .catch((e) => console.error("Error loading templates:", e))
   }, [])
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -141,7 +164,11 @@ export default function NewProjectForm() {
         try {
           setCreationStep("initializing")
           await updateProject(projectId, { syncStatus: "syncing" })
-          const initResult = await dbtApi.init(projectId, projectName)
+          const initResult = await dbtApi.init(
+            projectId,
+            projectName,
+            formData.init_template || undefined
+          )
           await updateProject(projectId, { syncStatus: initResult.success ? "synced" : "error" })
         } catch (initError) {
           console.error("dbt init error:", initError)
@@ -224,11 +251,29 @@ export default function NewProjectForm() {
                     <Input type="password" value={formData.git_token} onChange={(event) => setFormData({ ...formData, git_token: event.target.value })} placeholder="ghp_..." autoComplete="current-password" required />
                   </Field>
                 </div>
+                <Field label="Branch">
+                  <Input value={formData.git_branch} onChange={(event) => setFormData({ ...formData, git_branch: event.target.value })} />
+                </Field>
               </>
             )}
-            <Field label="Branch">
-              <Input value={formData.git_branch} onChange={(event) => setFormData({ ...formData, git_branch: event.target.value })} />
-            </Field>
+            {formData.project_type === "dbt_init" && (
+              <Field label="Starter Template">
+                <select
+                  value={formData.init_template}
+                  onChange={(event) => setFormData({ ...formData, init_template: event.target.value })}
+                  className="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0078D4]"
+                >
+                  {templates.map((tpl) => (
+                    <option key={tpl} value={tpl}>
+                      {formatTemplateLabel(tpl)} {tpl === defaultTemplate ? "(default)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  {formatTemplateDescription(formData.init_template)}
+                </p>
+              </Field>
+            )}
           </FormSection>
 
           <FormSection icon={<Database className="h-5 w-5 text-[#038387]" />} title="Connection" last>
