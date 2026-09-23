@@ -4,8 +4,11 @@ Process management router.
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth import require_user, resolve_user_id, verify_project_ownership
+from app.core.db import get_session
 from app.core.file_lock import AsyncFileLock
 from app.services.command import CommandService
 from app.services.dbt_worker import warm_worker_pool
@@ -16,11 +19,17 @@ router = APIRouter(prefix="/process", tags=["Process"])
 
 
 @router.post("/cancel")
-async def cancel_process(project_id: str):
+async def cancel_process(
+    project_id: str,
+    claims: dict = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
+):
     """
     Cancel a running process for a project.
     Also releases any file locks held by the cancelled process.
     """
+    user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
+    await verify_project_ownership(session, project_id, user_id)
     # Try to cancel multiple possible process IDs
     process_ids = [
         project_id,
@@ -59,8 +68,14 @@ async def cancel_process(project_id: str):
 
 
 @router.get("/status")
-async def process_status(project_id: str):
+async def process_status(
+    project_id: str,
+    claims: dict = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
+):
     """Check if a process is running for a project."""
+    user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
+    await verify_project_ownership(session, project_id, user_id)
     # Check multiple possible process IDs
     process_ids = [project_id, f"{project_id}:preview"]
 

@@ -438,12 +438,15 @@ class StateEndpointTest(unittest.IsolatedAsyncioTestCase):
                 state = MagicMock()
                 state.delete_project.return_value = True
                 with (
+                    patch("app.routers.project._require_owner", AsyncMock()),
                     patch("app.routers.project.ProjectService", return_value=project),
                     patch("app.routers.project.get_storage_service", return_value=storage),
                     patch("app.routers.project.StateService", return_value=state),
                 ):
                     result = await delete_project(
-                        ProjectDeleteRequest(project_id=PROJECT_ID, hard_delete=hard_delete)
+                        ProjectDeleteRequest(project_id=PROJECT_ID, hard_delete=hard_delete),
+                        {},
+                        MagicMock(),
                     )
 
                 state.delete_project.assert_called_once_with(PROJECT_ID)
@@ -455,11 +458,14 @@ class StateEndpointTest(unittest.IsolatedAsyncioTestCase):
         storage = MagicMock()
         storage.delete_from_storage = AsyncMock(return_value=True)
         with (
+            patch("app.routers.project._require_owner", AsyncMock()),
             patch("app.routers.project.ProjectService", return_value=project),
             patch("app.routers.project.get_storage_service", return_value=storage),
         ):
             result = await delete_project(
-                ProjectDeleteRequest(project_id="not-a-uuid", hard_delete=True)
+                ProjectDeleteRequest(project_id="not-a-uuid", hard_delete=True),
+                {},
+                MagicMock(),
             )
         self.assertTrue(result["success"])
         self.assertFalse(result["state_cleaned"])

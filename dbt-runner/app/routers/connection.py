@@ -12,6 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from adapters import get_adapter, list_adapters
+from app.core.auth import require_user, resolve_user_id, verify_connection_ownership
 from app.core.db import get_session
 from app.core.host_guard import HostNotAllowed, assert_host_allowed
 from app.core.dependencies import get_project_service
@@ -65,12 +66,15 @@ def _assert_target_allowed(conn_type: str, config: Dict[str, Any]) -> None:
 @router.get("/connection/usage/{connection_id}")
 async def get_connection_usage(
     connection_id: str,
+    claims: dict = Depends(require_user),
     session: AsyncSession = Depends(get_session),
 ):
     """
     Check which projects are using this connection.
     Returns list of projects that have this connection assigned.
     """
+    user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
+    await verify_connection_ownership(session, connection_id, user_id)
     try:
         logger.info(
             f"[CONNECTION USAGE CHECK] Checking usage for connection_id: {connection_id}"
@@ -138,7 +142,9 @@ async def list_available_adapters():
 
 
 @router.post("/connection/test")
-async def test_connection(request: ConnectionTestRequest):
+async def test_connection(
+    request: ConnectionTestRequest, claims: dict = Depends(require_user)
+):
     """
     Test any connection type using the adapter pattern.
     Supports: postgresql, duckdb, dremio (and more as added)
@@ -178,7 +184,9 @@ async def test_connection(request: ConnectionTestRequest):
 
 
 @router.post("/connection/schema")
-async def extract_connection_schema(request: ConnectionSchemaRequest):
+async def extract_connection_schema(
+    request: ConnectionSchemaRequest, claims: dict = Depends(require_user)
+):
     """
     Extract schema (tables, views, columns) from any connection type.
     Returns the complete schema metadata for the database.

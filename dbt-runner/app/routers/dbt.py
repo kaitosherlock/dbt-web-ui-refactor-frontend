@@ -28,6 +28,7 @@ from app.models.dbt import (
     CompileRequest,
     DbtCloneRequest,
     DbtCommand,
+    DbtDebugRequest,
     DbtInitRequest,
     DbtIntellisenseColumn,
     DbtIntellisenseDoc,
@@ -35,7 +36,9 @@ from app.models.dbt import (
     DbtIntellisenseModel,
     DbtIntellisenseResponse,
     DbtIntellisenseSource,
+    DbtLsRequest,
     DbtRetryRequest,
+    DbtRunOperationRequest,
     ExplainRequest,
     FormatSqlRequest,
     LineageRequest,
@@ -49,6 +52,7 @@ from app.services.dbt_service import (
     build_adapter_config_from_connection_row,
     build_adapter_config_from_dremio_source_row,
 )
+from app.services import dbt_cli
 from app.services.command import CommandService
 from app.services.project import ProjectService
 from app.services.run_launcher import launch_dbt_run
@@ -719,15 +723,97 @@ async def query_warehouse(
 
 @router.post("/init")
 async def dbt_init(
-    request: DbtInitRequest, service: DbtService = Depends(get_dbt_service)
+    request: DbtInitRequest,
+    claims: dict = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
+    service: DbtService = Depends(get_dbt_service),
 ):
-    """Initialize a new dbt project from scratch."""
+    """Initialize a new dbt project from scratch.
+
+    The project row exists before this is called (the frontend creates it), so
+    ownership is checked like any other project endpoint: init writes files
+    into the project directory and would otherwise overwrite anyone's.
+    """
+    user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
+    await _verify_project_ownership(session, request.project_id, user_id)
     result = await service.init_project(request)
     if not result["success"]:
         raise HTTPException(
             status_code=500, detail=result.get("message", "Failed to initialize")
         )
     return result
+
+
+@router.get("/init/templates")
+async def list_init_templates(claims: dict = Depends(require_user)):
+    """Starter templates POST /dbt/init accepts (a server-side allowlist)."""
+    return {"templates": list(dbt_cli.INIT_TEMPLATES), "default": "empty"}
+
+
+@router.post("/ls")
+async def list_resources(
+    request: DbtLsRequest,
+    claims: dict = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
+    service: DbtService = Depends(get_dbt_service),
+):
+    """List project resources (`dbt ls --output json`) as rows."""
+    user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
+    await _verify_project_ownership(session, request.project_id, user_id)
+    return await service.list_resources(request, session=session, user_id=user_id)
+
+
+@router.post("/debug")
+async def debug_project(
+    request: DbtDebugRequest,
+    claims: dict = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
+    service: DbtService = Depends(get_dbt_service),
+):
+    """Test a project's profile and connection (`dbt debug`); output is redacted."""
+    user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
+    await _verify_project_ownership(session, request.project_id, user_id)
+    return await service.debug_project(request, session=session, user_id=user_id)
+
+
+@router.get("/macros/{project_id}")
+async def list_project_macros(
+    project_id: str,
+    include_internal: bool = Query(
+        False, description="Also list dbt's and the adapter's own macros"
+    ),
+    claims: dict = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
+    service: DbtService = Depends(get_dbt_service),
+):
+    """Macros from the manifest, for the run-operation picker."""
+    user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
+    await _verify_project_ownership(session, project_id, user_id)
+    project_path = service.project.get_path_or_raise(project_id)
+    manifest = dbt_cli.load_manifest(project_path)
+    if manifest is None:
+        return {"success": True, "status": "missing_manifest", "macros": []}
+    return {
+        "success": True,
+        "status": "ready",
+        "generated_at": (manifest.get("metadata") or {}).get("generated_at"),
+        "macros": dbt_cli.list_macros(
+            manifest, project_path, include_internal=include_internal
+        ),
+    }
+
+
+@router.post("/run-operation")
+async def run_operation(
+    request: DbtRunOperationRequest,
+    claims: dict = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
+    service: DbtService = Depends(get_dbt_service),
+):
+    """Run one manifest macro (`dbt run-operation`); args become one --args JSON."""
+    user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
+    await _verify_project_ownership(session, request.project_id, user_id)
+    return await service.run_operation(request, session=session, user_id=user_id)
 
 
 @router.get("/intellisense/{project_id}", response_model=DbtIntellisenseResponse)
@@ -782,37 +868,65 @@ async def generate_docs(
 
 @router.post("/docs/serve")
 async def serve_docs(
-    request: DocsServeRequest, service: DbtService = Depends(get_dbt_service)
+    request: DocsServeRequest,
+    claims: dict = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
+    service: DbtService = Depends(get_dbt_service),
 ):
     """Start dbt docs server as a background process."""
+    user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
+    await _verify_project_ownership(session, request.project_id, user_id)
     return await service.serve_docs(request)
 
 
 @router.post("/docs/stop")
 async def stop_docs(
     project_id: str = Query(..., description="Project identifier"),
+    claims: dict = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
     service: DbtService = Depends(get_dbt_service),
 ):
     """Stop running docs server for a project."""
+    user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
+    await _verify_project_ownership(session, project_id, user_id)
     return await service.stop_docs(project_id)
 
 
 @router.get("/docs/status")
 async def get_docs_status(
     project_id: str = Query(..., description="Project identifier"),
+    claims: dict = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
     service: DbtService = Depends(get_dbt_service),
 ):
     """Get docs server status for a project."""
+    user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
+    await _verify_project_ownership(session, project_id, user_id)
     return service.get_docs_status(project_id)
 
 
 @router.get("/docs/list")
-async def list_docs_servers(service: DbtService = Depends(get_dbt_service)):
-    """List all active docs servers."""
-    return {
-        "servers": service.list_all_docs_servers(),
-        "count": len(service.list_all_docs_servers()),
-    }
+async def list_docs_servers(
+    claims: dict = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
+    service: DbtService = Depends(get_dbt_service),
+):
+    """List the active docs servers of the caller's own projects."""
+    user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
+    owned = await session.execute(
+        text(
+            "SELECT id FROM dbt_projects "
+            "WHERE created_by = CAST(:uid AS uuid) AND deleted_at IS NULL"
+        ),
+        {"uid": user_id},
+    )
+    owned_ids = {str(row[0]) for row in owned}
+    servers = [
+        server
+        for server in service.list_all_docs_servers()
+        if str(server.get("project_id")) in owned_ids
+    ]
+    return {"servers": servers, "count": len(servers)}
 
 
 # `database: lake` / `+database: lake` on one line, quoted or not. A regex over
@@ -1091,11 +1205,17 @@ async def check_connection(
 
 
 @router.get("/docs/view/{project_id}", response_class=HTMLResponse)
-async def view_docs(project_id: str):
+async def view_docs(
+    project_id: str,
+    claims: dict = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
+):
     """
     Serve dbt docs index.html for a project.
     Access via: /dbt/docs/view/{project_id}
     """
+    user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
+    await _verify_project_ownership(session, project_id, user_id)
     project_service = ProjectService()
     project_path = project_service.get_path_or_raise(project_id)
 
@@ -1121,17 +1241,28 @@ async def view_docs(project_id: str):
 
 
 @router.get("/docs/static/{project_id}/{file_path:path}")
-async def serve_docs_static(project_id: str, file_path: str):
+async def serve_docs_static(
+    project_id: str,
+    file_path: str,
+    claims: dict = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
+):
     """
     Serve static files (catalog.json, manifest.json, etc.) for dbt docs.
     """
+    user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
+    await _verify_project_ownership(session, project_id, user_id)
     project_service = ProjectService()
     project_path = project_service.get_path_or_raise(project_id)
 
-    # Files are in target/ directory
-    full_path = project_path / "target" / file_path
+    # Files are in target/ directory. `file_path` is a path parameter, so
+    # `../profiles.yml` (or an absolute path) would otherwise walk out of it.
+    target_root = (project_path / "target").resolve()
+    full_path = (target_root / file_path).resolve()
+    if not full_path.is_relative_to(target_root):
+        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
 
-    if not full_path.exists():
+    if not full_path.is_file():
         raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
 
     # Determine content type
