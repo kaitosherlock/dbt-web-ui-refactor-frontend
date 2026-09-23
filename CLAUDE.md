@@ -6,7 +6,7 @@ SQLAlchemy 2 async (backend). Auth is generic OIDC via NextAuth v5, or
 `AUTH_DISABLED=true` for a single local user.
 
 ```
-nextjs/       # App Router: (app)=authenticated, (auth)=login; components-v2/, lib/, prisma/
+nextjs/       # App Router: (app)=authenticated, (auth)=login; components/, lib/, prisma/
 dbt-runner/   # adapters/, ingest/, app/{routers,services,core}
 dsh-agent/    # one harness session per project over SSE; dbt_mcp/, profile/, plugins/
 docker-compose.yml   # postgres, redis, db-migrate, dbt-runner, frontend, dsh-agent
@@ -35,7 +35,7 @@ redirecting.
 **Routing.** Five sidebar sections (`/`, `/develop`, `/orchestrate`, `/explore`,
 `/data`); sub-pages are tabs in the query string (`?tab=schedules`) with legacy
 redirects in `next.config.ts`. `/settings` is reached from the avatar menu only.
-A new page needs an entry in `components-v2/layout/navigation.ts` *and* the icon
+A new page needs an entry in `components/layout/navigation.ts` *and* the icon
 map in `Sidebar.tsx`. Per-project configuration belongs in
 `ProjectSettingsDialog.tsx`, not a new dialog.
 

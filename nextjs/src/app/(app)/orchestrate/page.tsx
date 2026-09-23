@@ -3,9 +3,9 @@
 import React, { Suspense, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { CalendarClock, History } from "lucide-react"
-import PageTabs, { type PageTab } from "@/components-v2/layout/PageTabs"
-import RunsView from "@/components-v2/runs/RunsView"
-import SchedulesView from "@/components-v2/schedules/SchedulesView"
+import PageTabs, { type PageTab } from "@/components/layout/PageTabs"
+import RunsView from "@/components/runs/RunsView"
+import SchedulesView from "@/components/schedules/SchedulesView"
 
 type OrchestrateTab = "runs" | "schedules"
 

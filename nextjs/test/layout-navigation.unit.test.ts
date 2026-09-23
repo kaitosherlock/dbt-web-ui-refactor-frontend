@@ -2,7 +2,7 @@ import {
   getPageLabel,
   isNavigationItemActive,
   parseSidebarCollapsedPreference,
-} from "@/components-v2/layout/navigation"
+} from "@/components/layout/navigation"
 
 describe("layout navigation", () => {
   it("matches the root route without matching every page", () => {
@@ -24,13 +24,13 @@ describe("layout navigation", () => {
   it("labels Settings even though it has no sidebar slot", async () => {
     // Settings is reached from the avatar menu; without a secondary entry the
     // top bar would fall back to "Workspace" on /settings.
-    const { APP_NAVIGATION } = await import("@/components-v2/layout/navigation")
+    const { APP_NAVIGATION } = await import("@/components/layout/navigation")
     expect(APP_NAVIGATION.some((item) => item.href === "/settings")).toBe(false)
     expect(getPageLabel("/settings")).toBe("Settings")
   })
 
   it("keeps the sidebar to the five workspace sections", async () => {
-    const { APP_NAVIGATION } = await import("@/components-v2/layout/navigation")
+    const { APP_NAVIGATION } = await import("@/components/layout/navigation")
     expect(APP_NAVIGATION.map((item) => item.href)).toEqual([
       "/",
       "/develop",
@@ -50,9 +50,9 @@ describe("layout navigation", () => {
 describe("layout navigation icons", () => {
   it("gives every navigation entry an icon", async () => {
     // A missing icon renders an empty sidebar slot rather than failing a build.
-    const { APP_NAVIGATION } = await import("@/components-v2/layout/navigation")
+    const { APP_NAVIGATION } = await import("@/components/layout/navigation")
     const source = await import("node:fs").then((fs) =>
-      fs.readFileSync("src/components-v2/layout/Sidebar.tsx", "utf8"),
+      fs.readFileSync("src/components/layout/Sidebar.tsx", "utf8"),
     )
     for (const item of APP_NAVIGATION) {
       expect(source).toContain(`"${item.href}":`)

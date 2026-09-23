@@ -1,4 +1,4 @@
-import BrandMark from "@/components-v2/shared/BrandMark"
+import BrandMark from "@/components/shared/BrandMark"
 import { PRODUCT_TAGLINE } from "@/lib/branding"
 
 /**
