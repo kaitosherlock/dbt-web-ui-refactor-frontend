@@ -73,7 +73,11 @@ class IcebergPublishTests(unittest.TestCase):
 
     def _iceberg_rows(self, table: str = "orders") -> int:
         identifier = (*iceberg.namespace(PROJECT_ID, "marts"), table)
-        return iceberg.catalog(PROJECT_ID).load_table(identifier).scan().to_arrow().num_rows
+        catalog = iceberg.catalog(PROJECT_ID)
+        try:
+            return catalog.load_table(identifier).scan().to_arrow().num_rows
+        finally:
+            catalog.close()
 
     def _copied_files(self, table: str = "orders") -> list:
         return sorted(p.name for p in iceberg._copy_dir(PROJECT_ID, "marts", table).glob("*.parquet"))

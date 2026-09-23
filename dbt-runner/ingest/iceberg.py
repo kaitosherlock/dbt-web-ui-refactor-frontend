@@ -113,6 +113,17 @@ def is_configured() -> bool:
     return True
 
 
+def _file_uri(path: Path) -> str:
+    """Local file URI in the form PyIceberg parses correctly on this OS."""
+    resolved = path.resolve()
+    if resolved.drive:
+        # PyIceberg 0.11 joins a file URI's netloc and path. The standards form
+        # file:///C:/x therefore becomes /C:/x on Windows; putting the drive in
+        # netloc yields the intended C:/x. POSIX keeps the standards form.
+        return f"file://{resolved.as_posix()}"
+    return resolved.as_uri()
+
+
 def catalog(project_id: str):
     """Open this project's Iceberg catalog.
 
@@ -124,7 +135,8 @@ def catalog(project_id: str):
     warehouse = warehouse_dir(project_id)
     warehouse.mkdir(parents=True, exist_ok=True)
     return SqlCatalog(
-        CATALOG_NAME, **{"uri": catalog_uri(), "warehouse": f"file://{warehouse}"}
+        CATALOG_NAME,
+        **{"uri": catalog_uri(), "warehouse": _file_uri(warehouse)},
     )
 
 
@@ -250,7 +262,10 @@ def _publish_one(catalog, connection, project_id: str, schema: str, table: str) 
 def _copy(source: str, target_dir: Path) -> str:
     destination = target_dir / Path(source).name
     shutil.copy2(source, destination)
-    return str(destination)
+    # PyIceberg interprets the prefix before ':' as a filesystem scheme. A
+    # Windows drive letter therefore becomes the bogus scheme "c" unless this
+    # is an actual file URI.
+    return _file_uri(destination)
 
 
 def publish(
@@ -292,14 +307,17 @@ def publish(
         except Exception as exc:  # older pyiceberg has no _if_not_exists
             logger.debug("namespace create skipped: %s", exc)
 
-        results: Dict[str, str] = {}
-        for table in selected:
-            try:
-                results[table] = _publish_one(
-                    ice_catalog, connection, project_id, schema, table
-                )
-            except Exception as exc:
-                results[table] = f"failed: {exc}"
+        try:
+            results: Dict[str, str] = {}
+            for table in selected:
+                try:
+                    results[table] = _publish_one(
+                        ice_catalog, connection, project_id, schema, table
+                    )
+                except Exception as exc:
+                    results[table] = f"failed: {exc}"
+        finally:
+            ice_catalog.close()
     finally:
         connection.close()
 

@@ -243,6 +243,51 @@ class StateCommandTest(unittest.IsolatedAsyncioTestCase):
         _result, _run, state, project = await self._run(0, request, persist_state=True)
         state.save.assert_called_once_with(PROJECT_ID, "dev", project)
 
+    async def test_retry_with_a_private_state_dir_appends_state_without_reading_target(self):
+        """A retry started with its own server-owned state dir (set by the
+        retry endpoint via the private `_retry_state_dir` attribute) must
+        append `--state DIR` and must not require target/run_results.json to
+        exist at all - the whole point is not depending on that file.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "workspace"
+            project.mkdir(parents=True)
+            retry_dir = Path(tmp) / "retry-state"
+            retry_dir.mkdir(parents=True)
+            (retry_dir / "run_results.json").write_text(
+                json.dumps({"args": {"which": "build"}, "results": []})
+            )
+
+            request = DbtCommand(project_id=PROJECT_ID, command="retry")
+            request._retry_state_dir = retry_dir
+
+            service = DbtService(
+                project_service=_ProjectService(project),
+                state_service=StateService(Path(tmp) / "storage"),
+            )
+
+            async def run_dbt(*_args, **_kwargs):
+                return 0, "output", ""
+
+            with (
+                patch(
+                    "app.services.dbt_service.global_run_semaphore",
+                    return_value=_AsyncContext(),
+                ),
+                patch(
+                    "app.services.dbt_service.AsyncFileLock.lock",
+                    return_value=_AsyncContext(),
+                ),
+                patch.object(
+                    service, "_run_dbt_command", AsyncMock(side_effect=run_dbt)
+                ) as run_dbt_mock,
+            ):
+                result = await service.run_command(request)
+
+        self.assertTrue(result["success"])
+        argv = run_dbt_mock.await_args.args[0]
+        self.assertEqual(argv[argv.index("--state") + 1], str(retry_dir))
+
     async def test_retry_and_clone_refuse_missing_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:
             service = DbtService(
@@ -348,48 +393,75 @@ class SchedulerStateTest(unittest.IsolatedAsyncioTestCase):
 
 
 class StateEndpointTest(unittest.IsolatedAsyncioTestCase):
-    async def _retry(self, run_row, project: Path):
+    async def _retry(self, run_row, state: StateService):
         launch = AsyncMock(return_value={"status": "running"})
-        project_service = MagicMock()
-        project_service.get_or_sync = AsyncMock(return_value=project)
         with (
             patch("app.routers.dbt.resolve_user_id", AsyncMock(return_value="user-1")),
             patch("app.routers.dbt._load_owned_dbt_run", AsyncMock(return_value=run_row)),
-            patch("app.routers.dbt.ProjectService", return_value=project_service),
+            patch("app.routers.dbt.StateService", return_value=state),
             patch("app.routers.dbt.launch_dbt_run", launch),
         ):
             await retry_dbt_run("run-1", DbtRetryRequest(), {}, MagicMock())
         return launch
 
-    async def test_retry_replays_the_failed_run_on_its_own_target(self):
+    async def test_retry_uses_stored_results_even_after_a_show_replaced_target(self):
+        """The failed run's own results live on its dbt_runs row. A `dbt
+        show`/compile/preview on the same project takes no run lock and can
+        freely replace target/run_results.json in between - retry must not
+        care, because it never reads that file at all.
+        """
         with tempfile.TemporaryDirectory() as tmp:
-            project = Path(tmp)
-            _write_artifacts(project, "inv-1", target="prod")
+            state = StateService(Path(tmp) / "storage")
+            stored = {
+                "metadata": {"invocation_id": "inv-1"},
+                "args": {"which": "build", "target": "prod"},
+                "results": [],
+            }
             row = {
                 "project_id": PROJECT_ID,
                 "status": "error",
-                "results": json.dumps({"metadata": {"invocation_id": "inv-1"}}),
+                "results": json.dumps(stored),
             }
-            launch = await self._retry(row, project)
+            launch = await self._retry(row, state)
 
-        command = launch.await_args.args[0]
-        self.assertEqual(command.command, "retry")
-        self.assertEqual(command.target, "prod")
-        self.assertIsNone(command.state_target)
+            command = launch.await_args.args[0]
+            retry_run_id = launch.await_args.kwargs["run_id"]
+            self.assertEqual(command.command, "retry")
+            self.assertEqual(command.target, "prod")
+            self.assertIsNone(command.state_target)
 
-    async def test_retry_refuses_a_run_whose_results_were_replaced(self):
+            # The server wrote the failed run's own stored results into a
+            # private directory keyed by this retry attempt's own run id
+            # (handed to launch_dbt_run as `run_id`), and pointed the command
+            # at it via the private, request-body-proof attribute - not by
+            # reading anything from the project's target/ directory.
+            retry_dir = state.retry_dir(PROJECT_ID, retry_run_id)
+            self.assertEqual(command._retry_state_dir, retry_dir)
+            self.assertEqual(
+                json.loads((retry_dir / "run_results.json").read_text()), stored
+            )
+
+            # A second retry of the same failed run gets its own directory,
+            # so one attempt's later cleanup cannot break the other's.
+            launch2 = await self._retry(row, state)
+            retry_run_id_2 = launch2.await_args.kwargs["run_id"]
+            self.assertNotEqual(retry_run_id, retry_run_id_2)
+
+    async def test_retry_refuses_when_not_failed_missing_or_not_retryable(self):
         with tempfile.TemporaryDirectory() as tmp:
-            project = Path(tmp)
-            _write_artifacts(project, "inv-2")
+            state = StateService(Path(tmp) / "storage")
             cases = (
-                {"status": "success", "results": {"metadata": {"invocation_id": "inv-2"}}},
-                {"status": "error", "results": {"metadata": {"invocation_id": "inv-1"}}},
+                # Not the most recent status: only a failed run can be retried.
+                {"status": "success", "results": json.dumps({"args": {"which": "build"}})},
+                # No stored results at all - nothing to retry.
                 {"status": "error", "results": None},
+                # Stored results name a command dbt retry cannot replay.
+                {"status": "error", "results": json.dumps({"args": {"which": "show"}})},
             )
             for row in cases:
                 with self.subTest(row=row):
                     with self.assertRaises(HTTPException) as caught:
-                        await self._retry({"project_id": PROJECT_ID, **row}, project)
+                        await self._retry({"project_id": PROJECT_ID, **row}, state)
                     self.assertEqual(caught.exception.status_code, 409)
 
     async def test_clone_endpoint_uses_run_launcher_with_server_state(self):

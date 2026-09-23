@@ -117,7 +117,7 @@ class FileSourceTest(unittest.TestCase):
             "raw_files",
         )
         self.assertEqual(config["type"], "filesystem")
-        self.assertEqual(config["bucket_url"], f"file://{self.root}")
+        self.assertEqual(config["bucket_url"], self.root.as_uri())
         self.assertEqual(config["table"], "raw_files")
 
     def test_a_path_outside_every_root_is_refused(self):

@@ -69,7 +69,7 @@ def validate_bucket_url(raw: str) -> str:
     resolved = Path(candidate).resolve()
     for root in allowed:
         if resolved == root or root in resolved.parents:
-            return f"file://{resolved}"
+            return resolved.as_uri()
 
     raise UnsupportedFileSource(
         f"'{raw}' is not under any configured ingest root "

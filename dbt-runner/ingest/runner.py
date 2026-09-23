@@ -21,6 +21,7 @@ identifiers, paths, hosts and URLs have all been checked.
 import json
 import os
 import sys
+from pathlib import Path
 from typing import Any, Dict
 
 RESULT_PREFIX = "__INGEST_RESULT__"
@@ -39,8 +40,9 @@ def _configure_destination(destination: Dict[str, Any]) -> Any:
     if kind == "ducklake":
         prefix = "DESTINATION__DUCKLAKE__CREDENTIALS__"
         os.environ[f"{prefix}CATALOG"] = destination["catalog_url"]
+        data_path = str(destination["data_path"])
         os.environ[f"{prefix}STORAGE__BUCKET_URL"] = (
-            f"file://{destination['data_path']}"
+            data_path if "://" in data_path else Path(data_path).resolve().as_uri()
         )
         os.environ[f"{prefix}DUCKLAKE_NAME"] = destination["ducklake_name"]
         # Pinned explicitly: dlt would otherwise derive it from the DuckLake name

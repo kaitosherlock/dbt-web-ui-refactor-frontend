@@ -13,6 +13,7 @@ Uses a SQLite catalog and a SQLite source, so it needs no running services.
 """
 
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -23,9 +24,27 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from ingest import lakehouse
-from ingest.runner import RESULT_PREFIX
+from ingest.runner import RESULT_PREFIX, _configure_destination
 
 PROJECT_ID = "3f8b1c2d-0000-4000-8000-abcdefabcdef"
+
+
+def test_ducklake_storage_uses_a_real_uri(tmp_path, monkeypatch):
+    prefix = "DESTINATION__DUCKLAKE__CREDENTIALS__"
+    destination = {
+        "kind": "ducklake",
+        "catalog_url": f"sqlite:///{tmp_path / 'catalog.sqlite'}",
+        "data_path": str(tmp_path / "lake"),
+        "metadata_schema": "main",
+        "ducklake_name": lakehouse.ATTACH_ALIAS,
+    }
+
+    assert _configure_destination(destination) == "ducklake"
+    assert os.environ[f"{prefix}STORAGE__BUCKET_URL"] == (tmp_path / "lake").as_uri()
+
+    destination["data_path"] = "s3://company-lake/warehouse"
+    _configure_destination(destination)
+    assert os.environ[f"{prefix}STORAGE__BUCKET_URL"] == destination["data_path"]
 
 
 @pytest.fixture

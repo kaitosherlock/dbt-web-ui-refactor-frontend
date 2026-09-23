@@ -3,9 +3,10 @@ Pydantic models for dbt operations.
 """
 
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 
 VARS_DESCRIPTION = (
@@ -66,6 +67,15 @@ class DbtCommand(DbtRunOptions):
     environment_variables: Optional[Dict[str, str]] = Field(
         None, description="Environment variables to expose to dbt for this run"
     )
+
+    # Server-only. Set by the retry endpoint after it writes the failed run's
+    # own run_results.json to a private, run-scoped directory (see
+    # StateService.write_retry_results), so `dbt retry` reads it with
+    # `--state DIR` instead of whatever is currently in target/run_results.json.
+    # A PrivateAttr is never populated from request-body data - a client
+    # sending this key has no effect - so this cannot be used to smuggle a
+    # client-chosen --state path past validate_dbt_argv.
+    _retry_state_dir: Optional[Path] = PrivateAttr(default=None)
 
 
 class DbtRetryRequest(BaseModel):
