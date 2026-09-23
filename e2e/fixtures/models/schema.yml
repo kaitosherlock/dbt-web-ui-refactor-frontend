@@ -1,0 +1,77 @@
+version: 2
+
+models:
+  - name: stg_customers
+    columns:
+      - name: customer_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_orders
+    columns:
+      - name: order_id
+        data_tests:
+          - unique
+          - not_null
+      - name: customer_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_customers')
+                field: customer_id
+      - name: order_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['completed', 'placed', 'return_pending', 'returned', 'shipped']
+
+  - name: stg_payments
+    columns:
+      - name: payment_id
+        data_tests:
+          - unique
+          - not_null
+      - name: order_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('stg_orders')
+                field: order_id
+
+  - name: customer_orders
+    columns:
+      - name: customer_id
+        data_tests:
+          - unique
+          - not_null
+      - name: order_count
+        data_tests:
+          - not_null
+      - name: lifetime_value
+        data_tests:
+          - not_null
+
+  - name: stg_transactions
+    columns:
+      - name: transaction_id
+        data_tests:
+          - unique
+          - not_null
+      - name: transaction_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['FAILED', 'SUCCESS']
+
+  - name: incremental_transactions
+    columns:
+      - name: transaction_id
+        data_tests:
+          - unique
+          - not_null
+      - name: transaction_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['FAILED', 'SUCCESS']
