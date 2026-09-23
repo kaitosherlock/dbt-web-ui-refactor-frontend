@@ -31,6 +31,9 @@ import { getDbtRunnerUrl } from '@/common/api/client';
 import { buildDbtAdditionalArgs, buildDbtCommandWithArgs } from "../model/dbt-command-args";
 import { clearLegacyDevelopSession, loadDevelopSession, saveDevelopSession, type DevelopSessionState } from "../model/develop-session";
 import { useDbtIntellisense } from "../hooks/useDbtIntellisense";
+import { usePanelLayout } from "../hooks/usePanelLayout";
+import { useQueryPreviewState } from "../hooks/useQueryPreviewState";
+import { useFileTreeState } from "../hooks/useFileTreeState";
 // Cross-feature: git, projects, assistant — through their index.ts, not a
 // deep import into another feature's internals.
 import { gitApi, SourceControlPanel, CommitHistory, GitCredentialDialog } from "@/features/git";
@@ -98,9 +101,6 @@ interface OpenTab {
   isDraft?: boolean;
 }
 
-type TerminalTabType = "results" | "lineage" | "compiled" | "queryPlan" | "logs";
-type QueryPanelView = "results" | "plan";
-type SidebarTabType = "files" | "git" | "history";
 interface DevelopLayoutProps {
   projectId: string;
 }
@@ -188,64 +188,42 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
 
   const [project, setProject] = useState<DbtProject | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(restoredSession.sidebarCollapsed ?? false);
-  const [sidebarWidth, setSidebarWidth] = useState(restoredSession.sidebarWidth ?? 256);
-  const restoredSidebarTab = restoredSession.sidebarTab === "git" || restoredSession.sidebarTab === "history"
-    ? restoredSession.sidebarTab
-    : "files";
-  const [sidebarTab, setSidebarTab] = useState<SidebarTabType>(restoredSidebarTab);
+  const {
+    sidebarCollapsed, setSidebarCollapsed,
+    sidebarWidth, setSidebarWidth,
+    sidebarTab, setSidebarTab,
+    terminalOpen, setTerminalOpen,
+    terminalHeight, setTerminalHeight,
+    terminalTab, setTerminalTab,
+    agentOpen, setAgentOpen,
+    queryPanelView, setQueryPanelView,
+  } = usePanelLayout(restoredSession);
   const sidebarPanelRef = useRef<HTMLDivElement>(null);
   const sidebarWidthRef = useRef(sidebarWidth);
   const [searchQuery, setSearchQuery] = useState(restoredSession.searchQuery ?? "");
   const [selectedFile, setSelectedFile] = useState<string | null>(restoredSession.selectedFile ?? null);
   const [fileContent, setFileContent] = useState(restoredSession.fileContent ?? "");
-  const [terminalOpen, setTerminalOpen] = useState(restoredSession.terminalOpen ?? false);
-  const [terminalHeight, setTerminalHeight] = useState(restoredSession.terminalHeight ?? 250);
   const [terminalOutput, setTerminalOutput] = useState<string[]>(restoredSession.terminalOutput ?? []);
   const [terminalInput, setTerminalInput] = useState(restoredSession.terminalInput ?? "");
-  const [terminalTab, setTerminalTab] = useState<TerminalTabType>(
-    restoredSession.terminalTab === "queryPlan" ? "results" : restoredSession.terminalTab ?? "logs"
-  );
   const agent = useAgentAvailability();
-  const [agentOpen, setAgentOpen] = useState(false);
-  const [queryPanelView, setQueryPanelView] = useState<QueryPanelView>(
-    restoredSession.queryPanelView ?? (restoredSession.terminalTab === "queryPlan" ? "plan" : "results")
-  );
 
-  const [queryResults, setQueryResults] = useState<{
-    data: Record<string, unknown>[];
-    columns: string[];
-    columnTypes?: Record<string, string>;
-    rowCount?: number;
-    executionTime?: number;
-  }>(restoredSession.queryResults ?? { data: [], columns: [] });
-  const [queryLoading, setQueryLoading] = useState(false);
-  const [queryError, setQueryError] = useState<string | null>(restoredSession.queryError ?? null);
-  const [compiledSQL, setCompiledSQL] = useState(restoredSession.compiledSQL ?? "");
-  const [compiledLoading, setCompiledLoading] = useState(false);
-  const [compiledError, setCompiledError] = useState<string | null>(restoredSession.compiledError ?? null);
-  const [queryPlan, setQueryPlan] = useState<{
-    adapter: string;
-    model: string;
-    mode: "Estimated";
-    plan: string;
-    signals: string[];
-    executionTime?: number;
-    compiledSql?: string;
-  }>(restoredSession.queryPlan ?? { adapter: "", model: "", mode: "Estimated", plan: "", signals: [] });
-  const [queryPlanLoading, setQueryPlanLoading] = useState(false);
-  const [queryPlanLoadingStage, setQueryPlanLoadingStage] = useState<string | null>(null);
-  const [queryPlanError, setQueryPlanError] = useState<string | null>(restoredSession.queryPlanError ?? null);
-
-  const [lineageNodes, setLineageNodes] = useState<
-    { id: string; name: string; type: string; schema?: string; position?: "upstream" | "current" | "downstream"; columns?: string[] }[]
-  >(restoredSession.lineageNodes ?? []);
-  const [lineageEdges, setLineageEdges] = useState<{ from: string; to: string }[]>(restoredSession.lineageEdges ?? []);
-  const [lineageLoading, setLineageLoading] = useState(false);
-  const [lineageError, setLineageError] = useState<string | null>(restoredSession.lineageError ?? null);
-  const [columnLineage, setColumnLineage] = useState<
-    Record<string, { column: string; table: string; expression?: string }[]>
-  >(restoredSession.columnLineage ?? {});
+  const {
+    queryResults, setQueryResults,
+    queryLoading, setQueryLoading,
+    queryError, setQueryError,
+    compiledSQL, setCompiledSQL,
+    compiledLoading, setCompiledLoading,
+    compiledError, setCompiledError,
+    queryPlan, setQueryPlan,
+    queryPlanLoading, setQueryPlanLoading,
+    queryPlanLoadingStage, setQueryPlanLoadingStage,
+    queryPlanError, setQueryPlanError,
+    lineageNodes, setLineageNodes,
+    lineageEdges, setLineageEdges,
+    lineageLoading, setLineageLoading,
+    lineageError, setLineageError,
+    columnLineage, setColumnLineage,
+  } = useQueryPreviewState(restoredSession);
 
   const [openTabs, setOpenTabs] = useState<OpenTab[]>(restoredSession.openTabs ?? []);
   const [activeTabPath, setActiveTabPath] = useState<string | null>(restoredSession.activeTabPath ?? null);
@@ -276,10 +254,12 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
       return false;
     }
     return true;
-  }, []);
-  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(restoredSession.expandedPaths ?? []));
-  const [loadedChildren, setLoadedChildren] = useState<Record<string, FileNode[]>>(restoredSession.loadedChildren ?? {});
-  const [fileTree, setFileTree] = useState<FileNode[]>([]);
+  }, [setTerminalOpen]);
+  const {
+    expandedPaths, setExpandedPaths,
+    loadedChildren, setLoadedChildren,
+    fileTree, setFileTree,
+  } = useFileTreeState(restoredSession);
   const recentlySavedFilesRef = useRef<Set<string>>(new Set());
   const intellisenseRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -377,7 +357,7 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
     window.addEventListener("pointercancel", handlePointerUp);
-  }, []);
+  }, [setSidebarWidth]);
 
   useEffect(() => {
     if (!project) {
@@ -580,7 +560,34 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
         setEnvVarsError(null);
       })
       .catch((error) => setEnvVarsError(error instanceof Error ? error.message : "Failed to load env vars"));
-  }, [projectId, userId]);
+    // The setters below come from usePanelLayout / useQueryPreviewState /
+    // useFileTreeState rather than a plain useState in this component, so
+    // react-hooks/exhaustive-deps can't see that they're as stable as any
+    // other setState function (they are — each hook just returns useState's
+    // own setter). Listed to satisfy the rule; none of them ever change.
+  }, [
+    projectId,
+    userId,
+    setColumnLineage,
+    setCompiledError,
+    setCompiledSQL,
+    setExpandedPaths,
+    setLineageEdges,
+    setLineageError,
+    setLineageNodes,
+    setLoadedChildren,
+    setQueryError,
+    setQueryPanelView,
+    setQueryPlan,
+    setQueryPlanError,
+    setQueryResults,
+    setSidebarCollapsed,
+    setSidebarTab,
+    setSidebarWidth,
+    setTerminalHeight,
+    setTerminalOpen,
+    setTerminalTab,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !userId) return;
