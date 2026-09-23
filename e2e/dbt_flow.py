@@ -492,7 +492,7 @@ class DbtFlow:
 
         def step_6() -> str:
             run = self.start_run(
-                {"project_id": self.require_project_id(), "command": "seed"}, "seed"
+                {"project_id": self.require_project_id(), "command": "seed", "full_refresh": True}, "seed"
             )
             return f"run {run['id']} loaded all four seeds"
 
@@ -656,17 +656,20 @@ class DbtFlow:
             preview = self.require_success(
                 self.json_request(
                     "POST",
-                    "/api/dbt-runner/dbt/preview",
+                    "/api/dbt-runner/dbt/query",
                     json={
                         "project_id": self.require_project_id(),
-                        "model_path": "models/incremental/incremental_transactions.sql",
+                        # Count the built relation. Previewing the model would
+                        # re-run its SQL with is_incremental() true, which by
+                        # design selects only rows newer than the table's max.
+                        "sql": "select * from {{ ref('incremental_transactions') }}",
                         "limit": 1000,
                     },
                 ),
-                "preview incremental_transactions",
+                "query incremental_transactions",
             )
             expected_rows = self.csv_facts.transaction_count if self.csv_facts else None
-            if preview.get("row_count") != expected_rows:
+            if preview.get("row_count", len(preview.get("data") or preview.get("rows") or [])) != expected_rows:
                 raise FlowError(
                     f"incremental row count was {preview.get('row_count')}; "
                     f"CSV expectation is {expected_rows}"

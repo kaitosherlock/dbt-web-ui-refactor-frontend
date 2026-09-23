@@ -1,0 +1,24 @@
+version: 2
+
+# The CSVs have upper-case headers. dbt-postgres quotes seed columns by
+# default, which would keep "ID" upper case; unquoted they fold to id.
+# Account numbers keep their leading zeros and exceed int32, and response codes
+# are codes, not numbers - dbt's inference would get all three wrong.
+seeds:
+  - name: jaffle_shop_customers
+    config:
+      quote_columns: false
+  - name: jaffle_shop_orders
+    config:
+      quote_columns: false
+  - name: stripe_payments
+    config:
+      quote_columns: false
+  - name: transactions_batch1
+    config:
+      quote_columns: false
+      column_types:
+        amount: "{{ 'bigint' }}"
+        from_account: "{{ 'string' if target.type == 'databricks' else 'text' }}"
+        to_account: "{{ 'string' if target.type == 'databricks' else 'text' }}"
+        response_code: "{{ 'string' if target.type == 'databricks' else 'text' }}"

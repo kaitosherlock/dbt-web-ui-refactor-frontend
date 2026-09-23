@@ -1426,12 +1426,19 @@ class DbtService:
         except Exception:
             pass
 
+        # The run_command enum (Prisma migration add_run_command_enum_values).
         valid_commands = {
             "run", "test", "build", "compile", "docs", "deps", "clean",
             "seed", "snapshot", "source_freshness",
+            "parse", "ls", "debug", "run_operation", "retry", "clone",
         }
-        # `dbt source freshness` is two CLI words but one enum value.
-        command_name = "source_freshness" if command_name == "source" else command_name
+        # CLI spellings that differ from their enum value: `dbt source
+        # freshness` is two words, `list` is `ls`, run-operation has a dash.
+        command_name = {
+            "source": "source_freshness",
+            "list": "ls",
+            "run-operation": "run_operation",
+        }.get(command_name, command_name)
         cmd_enum = command_name if command_name in valid_commands else "run"
 
         await session.execute(

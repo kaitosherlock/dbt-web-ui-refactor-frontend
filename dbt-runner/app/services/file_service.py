@@ -14,6 +14,19 @@ from app.services.project import ProjectService
 logger = logging.getLogger(__name__)
 
 
+
+def _normalise_content(path: Path, content: str) -> str:
+    """Drop a UTF-8 byte-order mark from a CSV before it lands on disk.
+
+    Spreadsheet exports start CSVs with one, and dbt's seed loader keeps it:
+    the first column is then named '\ufeffID', so `select id` fails with
+    "column does not exist" in every model built on the seed.
+    """
+    if path.suffix.lower() == ".csv" and content.startswith("\ufeff"):
+        return content[1:]
+    return content
+
+
 class FileService:
     """Service for file operations."""
 
@@ -261,7 +274,7 @@ class FileService:
             file_path.parent.mkdir(parents=True)
 
         try:
-            file_path.write_text(content)
+            file_path.write_text(_normalise_content(file_path, content), encoding="utf-8")
             return {"success": True, "path": path}
         except PermissionError:
             logger.error(f"Permission denied writing file: {path}")
@@ -307,7 +320,7 @@ class FileService:
                 if not content:
                     content = self._get_default_content(target_path)
 
-                target_path.write_text(content or "")
+                target_path.write_text(_normalise_content(target_path, content or ""), encoding="utf-8")
                 return {
                     "success": True,
                     "message": f"File created: {request.path}",
@@ -354,7 +367,7 @@ class FileService:
 
         try:
             target_path.parent.mkdir(parents=True, exist_ok=True)
-            target_path.write_text(request.content)
+            target_path.write_text(_normalise_content(target_path, request.content), encoding="utf-8")
 
             return {"success": True, "message": f"File saved: {request.path}"}
         except PermissionError:
