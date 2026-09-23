@@ -210,3 +210,31 @@ the failing ids against `docs/codex/baseline-failures.txt` - zero new.
 Test route config for `/connection/test` and `/connection/schema`:
 `{account, user, auth_type, password | private_key, private_key_passphrase?,
 role?, warehouse?, database?, schema?}`.
+
+### Databricks row shape (frontend follow-up)
+
+| Column | Value |
+|---|---|
+| `connectionType` | `"databricks"` |
+| `host` | Workspace hostname only (required): `*.cloud.databricks.com`, `*.azuredatabricks.net`, or `*.gcp.databricks.com`; no scheme, port, path, or query |
+| `port` | `443` |
+| `database` | Unity Catalog name (optional; omit/empty uses the adapter default catalog) |
+| `username` | Empty; Databricks PAT and OAuth M2M do not use it |
+| `passwordEncrypted` | Personal access token for `pat`; empty/unused for `oauth_m2m` |
+| `extraConfig.auth_type` | `"pat"` (default) or `"oauth_m2m"` |
+| `extraConfig.http_path` | Required SQL warehouse path `/sql/1.0/warehouses/<16-character-id>` or cluster path `/sql/protocolv1/o/<workspace-id>/<cluster-id>` |
+| `extraConfig.client_id` | OAuth M2M service-principal client ID; required only for `oauth_m2m` |
+| `extraConfig.secondary_secret_encrypted` | OAuth M2M client secret, encrypted; required only for `oauth_m2m` and stripped from every response returning `extraConfig` |
+| `extraConfig.schema` | Required dbt target schema |
+| `extraConfig.threads` | Optional int (1-32, default 4) |
+
+The frontend save-time host guard must check the exact workspace hostname above.
+It must not offer OAuth U2M/external-browser, Azure tenant auth, a custom OAuth
+URL, proxy/HTTP settings, file paths, or TLS-disable options. The Prisma enum
+needs `databricks`, and `ConnectionDialog.tsx`, the test-route mapping, and
+`PENDING_IN_DIALOG` must then be updated together.
+
+Test route config for `/connection/test` and `/connection/schema`:
+`{host, http_path, auth_type, token?, client_id?, client_secret?, catalog?,
+schema?}`. For PAT send `token`; for OAuth M2M send `client_id` and
+`client_secret` and no token.

@@ -264,6 +264,11 @@ SNOWFLAKE_EXTRA_CONFIG_KEYS = (
 )
 
 
+# Databricks intentionally has no arbitrary option pass-through. Host and
+# http_path are validated by its adapter; OAuth URLs, proxy/HTTP settings,
+# filesystem paths and TLS overrides must never reach the connector/profile.
+
+
 def connection_secondary_secret(conn_row: Dict[str, Any]) -> str:
     """The decrypted second secret of a connection row, or "" if it has none."""
     extra_cfg = conn_row.get("extra_config") or {}
@@ -408,6 +413,25 @@ def build_adapter_config_from_connection_row(
         for key in SNOWFLAKE_EXTRA_CONFIG_KEYS:
             if key in extra_cfg:
                 adapter_config[key] = extra_cfg[key]
+        return conn_type, adapter_config, needs_secret
+
+    if conn_type == "databricks":
+        auth_type = str(extra_cfg.get("auth_type") or "pat").lower()
+        adapter_config = {
+            "host": conn_row["host"],
+            "http_path": extra_cfg.get("http_path"),
+            "auth_type": auth_type,
+            "catalog": conn_row["database"] or None,
+            "schema": extra_cfg.get("schema") or None,
+            "threads": _threads(extra_cfg, conn_type),
+        }
+        if auth_type == "oauth_m2m":
+            adapter_config["client_id"] = extra_cfg.get("client_id")
+            if has_secondary_secret:
+                adapter_config["client_secret"] = secondary_secret_value
+        else:
+            adapter_config["token"] = secret_value
+            needs_secret = True
         return conn_type, adapter_config, needs_secret
 
     if conn_type == "ducklake":

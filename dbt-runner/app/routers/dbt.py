@@ -70,7 +70,14 @@ router = APIRouter(prefix="/dbt", tags=["dbt"])
 # Profile keys whose value is a credential. A key-pair profile's private key and
 # its passphrase are one as much as a password is.
 _REDACTED_PROFILE_KEYS = frozenset(
-    {"password", "pat", "token", "private_key", "private_key_passphrase"}
+    {
+        "password",
+        "pat",
+        "token",
+        "private_key",
+        "private_key_passphrase",
+        "client_secret",
+    }
 )
 
 

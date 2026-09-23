@@ -23,6 +23,7 @@ LS_RESOURCE_TYPES = frozenset(
         "saved_query",
         "source",
         "analysis",
+        "function",
         "model",
         "test",
         "unit_test",
