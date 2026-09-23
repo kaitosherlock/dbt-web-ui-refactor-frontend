@@ -14,13 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from adapters import get_adapter, list_adapters
 from app.core.auth import require_user, resolve_user_id, verify_connection_ownership
 from app.core.db import get_session
-from app.core.host_guard import HostNotAllowed, assert_host_allowed
+from app.core.host_guard import HostNotAllowed
 from app.core.dependencies import get_project_service
 from app.models.connection import (
     ConnectionSchemaRequest,
     ConnectionTestRequest,
     DremioTestRequest,
 )
+from app.services.connection_targets import assert_connection_target_allowed
 from app.services.project import ProjectService
 from ingest.rest_source import UnsupportedRestSource, probe_rest
 from ingest.sql_source import (
@@ -34,10 +35,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Connections"])
 
-# DuckDB is a local file and Spark is reached through its own session config, so
-# neither carries a network host to check.
-_HOSTLESS_TYPES = {"duckdb", "spark"}
-
 # Connection types with no dbt adapter, tested through the same code path ingest
 # reads them with. `rest` is not in SOURCE_ONLY_TYPES because it is not SQL.
 _REST_TYPE = "rest"
@@ -46,21 +43,11 @@ _REST_TYPE = "rest"
 def _assert_target_allowed(conn_type: str, config: Dict[str, Any]) -> None:
     """Refuse connections aimed at this deployment's own infrastructure.
 
-    Without this, a user can point a connection at the application's Postgres,
-    attach it to a project, and read every other user's encrypted warehouse
-    credentials out of the `connections` table through ordinary dbt queries.
+    See app/services/connection_targets.py - shared with the ingest table
+    picker and the per-target check, so a type whose host is derived (Snowflake:
+    from the account) is guarded identically everywhere.
     """
-    if conn_type in _HOSTLESS_TYPES:
-        return
-    host = str((config or {}).get("host") or "").strip()
-    if not host:
-        return
-    raw_port = (config or {}).get("port")
-    try:
-        port = int(raw_port) if raw_port else None
-    except (TypeError, ValueError):
-        port = None
-    assert_host_allowed(host, port)
+    assert_connection_target_allowed(conn_type, config)
 
 
 @router.get("/connection/usage/{connection_id}")

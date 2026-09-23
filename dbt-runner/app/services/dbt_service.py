@@ -54,6 +54,7 @@ from app.services.command import (
     validate_dbt_argv,
 )
 from app.services.dbt_environment import (
+    DBT_PROFILE_SECONDARY_SECRET_ENV,
     DBT_PROFILE_SECRET_ENV,
     sanitize_dbt_environment,
 )
@@ -75,6 +76,16 @@ from ingest import lakehouse
 logger = logging.getLogger(__name__)
 
 DBT_PROFILE_SECRET_PLACEHOLDER = "{{ env_var('DBT_ENV_SECRET_DBT_CRAFT_CREDENTIAL') }}"
+DBT_PROFILE_SECONDARY_SECRET_PLACEHOLDER = (
+    "{{ env_var('" + DBT_PROFILE_SECONDARY_SECRET_ENV + "') }}"
+)
+
+# A connection row has one secret column, password_encrypted. A type that needs
+# a second secret (Snowflake: the private key's passphrase) keeps it encrypted
+# under this extra_config key - encrypted like password_encrypted, never shown
+# back to the browser, never copied into an adapter config other than as the
+# secondary placeholder or its decrypted value.
+SECONDARY_SECRET_KEY = "secondary_secret_encrypted"
 
 # The project's own connection is always this target, so a project that never
 # defines another one renders exactly the profile it did before targets existed.
@@ -240,6 +251,27 @@ def _threads(extra_cfg: Dict[str, Any], conn_type: str) -> int:
     return max(1, min(value, MAX_THREADS))
 
 
+# dbt-snowflake options a connection may carry in extra_config. The adapter
+# type-checks each again before it reaches profiles.yml.
+SNOWFLAKE_EXTRA_CONFIG_KEYS = (
+    "query_tag",
+    "client_session_keep_alive",
+    "connect_retries",
+    "connect_timeout",
+    "retry_on_database_errors",
+    "retry_all",
+    "reuse_connections",
+)
+
+
+def connection_secondary_secret(conn_row: Dict[str, Any]) -> str:
+    """The decrypted second secret of a connection row, or "" if it has none."""
+    extra_cfg = conn_row.get("extra_config") or {}
+    if not isinstance(extra_cfg, dict):
+        return ""
+    return decrypt_secret_or_plaintext(extra_cfg.get(SECONDARY_SECRET_KEY) or None)
+
+
 def _elapsed_ms(start: float) -> int:
     return int((time.perf_counter() - start) * 1000)
 
@@ -266,14 +298,22 @@ def append_target(cmd: List[str], target: Optional[str]) -> List[str]:
 def build_adapter_config_from_connection_row(
     conn_row: Dict[str, Any],
     secret_value: Optional[str] = DBT_PROFILE_SECRET_PLACEHOLDER,
+    secondary_secret_value: Optional[str] = DBT_PROFILE_SECONDARY_SECRET_PLACEHOLDER,
 ) -> tuple[str, Dict[str, Any], bool]:
     """Map a connections table row to adapter config.
 
     Returns connection type, adapter config, and whether this profile needs the
-    shared dbt secret env var.
+    shared dbt secret env var. `secret_value` fills the slot of the row's
+    password_encrypted and `secondary_secret_value` that of its
+    SECONDARY_SECRET_KEY: env_var() placeholders when rendering profiles.yml,
+    real values for a direct connection (build_adapter_config_with_secrets).
+    The secondary slot is filled only when the row actually has that secret.
     """
     conn_type = conn_row["connection_type"]
     extra_cfg: Dict[str, Any] = dict(conn_row.get("extra_config") or {})
+    # Popped first, so no spread of extra_config below (dremio) can carry the
+    # ciphertext into a profile.
+    has_secondary_secret = bool(extra_cfg.pop(SECONDARY_SECRET_KEY, None))
     needs_secret = False
 
     if conn_type == "postgresql":
@@ -343,6 +383,33 @@ def build_adapter_config_from_connection_row(
             needs_secret = True
         return conn_type, adapter_config, needs_secret
 
+    if conn_type == "snowflake":
+        # Snowflake has no host of its own: the account identifier names it, and
+        # the adapter validates the account and derives the host from it. The
+        # row's `host` column is display and host-guard input only.
+        auth_type = str(extra_cfg.get("auth_type") or "password").lower()
+        needs_secret = True
+        adapter_config = {
+            "account": extra_cfg.get("account"),
+            "user": conn_row["username"],
+            "auth_type": auth_type,
+            "role": extra_cfg.get("role") or None,
+            "warehouse": extra_cfg.get("warehouse") or None,
+            "database": conn_row["database"],
+            "schema": extra_cfg.get("schema") or None,
+            "threads": _threads(extra_cfg, conn_type),
+        }
+        if auth_type == "keypair":
+            adapter_config["private_key"] = secret_value
+            if has_secondary_secret:
+                adapter_config["private_key_passphrase"] = secondary_secret_value
+        else:
+            adapter_config["password"] = secret_value
+        for key in SNOWFLAKE_EXTRA_CONFIG_KEYS:
+            if key in extra_cfg:
+                adapter_config[key] = extra_cfg[key]
+        return conn_type, adapter_config, needs_secret
+
     if conn_type == "ducklake":
         # A lakehouse is attached alongside a warehouse, never used as one: dbt
         # still needs a DuckDB database to open, and DuckLake is reached through
@@ -367,8 +434,28 @@ def build_adapter_config_from_connection_row(
 
     # Adding a warehouse means: an adapter in adapters/__init__.py, its dbt
     # plugin in pyproject.toml, and the type in CONNECTION_TYPES on the
-    # frontend. A mapping here alone only produces failed runs.
+    # frontend. A mapping here alone only produces failed runs. The full
+    # checklist is docs/codex/adding-an-adapter.md.
     raise ValueError(f"Unsupported connection_type: {conn_type}")
+
+
+def build_adapter_config_with_secrets(
+    conn_row: Dict[str, Any],
+) -> tuple[str, Dict[str, Any]]:
+    """Adapter config holding the row's real secrets, for connecting directly.
+
+    For the paths that open a connection themselves (target checks, the ingest
+    table picker) rather than render profiles.yml. Filling the secret slots here
+    is what puts a key-pair connection's private key under `private_key` and a
+    Dremio PAT under `pat`: patching `password` in afterwards only fits the types
+    whose secret happens to be a password.
+    """
+    conn_type, config, _ = build_adapter_config_from_connection_row(
+        conn_row,
+        secret_value=decrypt_secret_or_plaintext(conn_row.get("password_encrypted")),
+        secondary_secret_value=connection_secondary_secret(conn_row),
+    )
+    return conn_type, config
 
 
 def build_adapter_config_from_dremio_source_row(
@@ -551,7 +638,7 @@ class DbtService:
         return len(stale_runs)
 
     @staticmethod
-    def target_secret_env(target: str) -> str:
+    def target_secret_env(target: str, base: str = DBT_PROFILE_SECRET_ENV) -> str:
         """Name of the env var carrying one target's credential.
 
         Every output needs its own: with two targets sharing
@@ -559,11 +646,15 @@ class DbtService:
         wins and the other target authenticates against its warehouse with the
         wrong password. The default target keeps the original name, so a
         single-target project's profile is byte-identical to before.
+
+        `base` picks the secret: DBT_PROFILE_SECONDARY_SECRET_ENV names the
+        target's second secret the same way. Both sit under the prefix
+        dbt_environment reserves, so no client env can shadow either.
         """
         if target == DEFAULT_TARGET_NAME:
-            return DBT_PROFILE_SECRET_ENV
+            return base
         suffix = "".join(char if char.isalnum() else "_" for char in target).upper()
-        return f"{DBT_PROFILE_SECRET_ENV}__{suffix}"
+        return f"{base}__{suffix}"
 
     @staticmethod
     async def _load_project_targets(
@@ -613,6 +704,9 @@ class DbtService:
             connection_id=connection_id,
             dremio_source_id=dremio_source_id,
             secret_env=secret_env,
+            secondary_secret_env=DbtService.target_secret_env(
+                target_name, DBT_PROFILE_SECONDARY_SECRET_ENV
+            ),
         )
         env = dict(target_env)
         env.update(DbtService._apply_lakehouse_attach(lake, conn_type, adapter_config))
@@ -657,9 +751,12 @@ class DbtService:
         connection_id: Optional[str],
         dremio_source_id: Optional[str],
         secret_env: str,
+        secondary_secret_env: Optional[str] = None,
     ) -> tuple[str, Dict[str, Any], Dict[str, str]]:
         """Adapter config for one profiles.yml output, plus the env it needs."""
         placeholder = f"{{{{ env_var('{secret_env}') }}}}"
+        secondary_env = secondary_secret_env or DBT_PROFILE_SECONDARY_SECRET_ENV
+        secondary_placeholder = f"{{{{ env_var('{secondary_env}') }}}}"
         dbt_env: Dict[str, str] = {}
 
         if connection_id:
@@ -679,9 +776,17 @@ class DbtService:
                     "exists - attach an existing connection in the UI",
                 )
             conn_type, adapter_config, needs_secret = (
-                build_adapter_config_from_connection_row(dict(row), placeholder)
+                build_adapter_config_from_connection_row(
+                    dict(row), placeholder, secondary_placeholder
+                )
             )
             secret_column = "password_encrypted"
+            # Only a type that placed the secondary placeholder gets its env
+            # var: the builder fills that slot only when the row has the secret.
+            if secondary_placeholder in adapter_config.values():
+                secondary = connection_secondary_secret(dict(row))
+                if secondary:
+                    dbt_env[secondary_env] = secondary
         else:
             result = await session.execute(
                 text(

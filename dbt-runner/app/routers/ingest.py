@@ -36,7 +36,11 @@ from app.models.ingest import (
     IngestTableList,
     RestProbeRequest,
 )
-from app.services.dbt_service import build_adapter_config_from_connection_row
+from app.services.connection_targets import assert_connection_target_allowed
+from app.services.dbt_service import (
+    build_adapter_config_from_connection_row,
+    build_adapter_config_with_secrets,
+)
 from app.services.lakes import resolve_project_lake
 from ingest import lakehouse
 from ingest.destination import (
@@ -474,11 +478,11 @@ async def list_connection_tables(
             tables=sorted({n for n in names if _TABLE_RE.match(str(n))}),
         )
 
-    conn_type, config, needs_secret = build_adapter_config_from_connection_row(
-        connection, secret_value=None
-    )
-    if needs_secret:
-        config = {**config, "password": secret}
+    conn_type, config = build_adapter_config_with_secrets(connection)
+    try:
+        assert_connection_target_allowed(conn_type, config)
+    except HostNotAllowed as exc:
+        return IngestTableList(success=False, message=str(exc))
     try:
         adapter = get_adapter(conn_type, config)
         schema = await adapter.extract_schema()

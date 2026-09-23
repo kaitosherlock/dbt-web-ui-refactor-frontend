@@ -20,7 +20,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from adapters import get_adapter
 from app.core.auth import require_user, resolve_user_id, verify_project_ownership
-from app.core.crypto import decrypt_secret_or_plaintext
 from app.core.db import get_session
 from app.core.dependencies import get_dbt_service
 from app.core.file_lock import AsyncFileLock
@@ -50,10 +49,12 @@ from app.services.dbt_service import (
     DbtService,
     DBT_PROFILE_SECRET_PLACEHOLDER,
     build_adapter_config_from_connection_row,
+    build_adapter_config_with_secrets,
     build_adapter_config_from_dremio_source_row,
 )
 from app.services import dbt_cli
 from app.services.command import CommandService
+from app.services.connection_targets import assert_connection_target_allowed
 from app.services.project import ProjectService
 from app.services.run_launcher import launch_dbt_run
 from app.services.scheduler import next_fire_time
@@ -66,13 +67,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/dbt", tags=["dbt"])
 
 
+# Profile keys whose value is a credential. A key-pair profile's private key and
+# its passphrase are one as much as a password is.
+_REDACTED_PROFILE_KEYS = frozenset(
+    {"password", "pat", "token", "private_key", "private_key_passphrase"}
+)
+
+
 def _redact_profiles_yml(content: str) -> str:
     """Return profiles.yml with credential values masked for diagnostics."""
     try:
         parsed = _yaml.safe_load(content) or {}
     except Exception:
         return "\n".join(
-            "***REDACTED***" if any(k in line.lower() for k in ("password:", "pat:", "token:")) else line
+            "***REDACTED***"
+            if any(f"{k}:" in line.lower() for k in _REDACTED_PROFILE_KEYS)
+            else line
             for line in content.splitlines()
         )
 
@@ -80,7 +90,7 @@ def _redact_profiles_yml(content: str) -> str:
         if isinstance(value, dict):
             return {
                 key: "***REDACTED***"
-                if str(key).lower() in {"password", "pat", "token"}
+                if str(key).lower() in _REDACTED_PROFILE_KEYS
                 else redact(item)
                 for key, item in value.items()
             }
@@ -990,14 +1000,9 @@ async def _check_targets(
             "connection_type": row["connection_type"],
         }
         try:
-            conn_type, config, needs_secret = build_adapter_config_from_connection_row(
-                dict(row), secret_value=None
-            )
-            if needs_secret:
-                config = {
-                    **config,
-                    "password": decrypt_secret_or_plaintext(row["password_encrypted"]),
-                }
+            conn_type, config = build_adapter_config_with_secrets(dict(row))
+            # The same guard /connection/test applies: this dials the host too.
+            await asyncio.to_thread(assert_connection_target_allowed, conn_type, config)
             result = await get_adapter(conn_type, config).test_connection()
             return {**report, "ok": bool(result.get("success")), "message": result.get("message")}
         except Exception as exc:
