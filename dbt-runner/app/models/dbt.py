@@ -21,9 +21,38 @@ class DbtCommand(BaseModel):
         "Null uses the project's default target.",
     )
     flags: Optional[List[str]] = Field(None, description="Additional command flags")
+    state_target: Optional[str] = Field(
+        None, description="Named target whose server-owned artifacts provide dbt state"
+    )
+    defer: bool = Field(False, description="Defer unresolved refs to state")
+    favor_state: bool = Field(
+        False, description="Prefer state relations when deferring"
+    )
     environment_variables: Optional[Dict[str, str]] = Field(
         None, description="Environment variables to expose to dbt for this run"
     )
+
+
+class DbtRetryRequest(BaseModel):
+    """Retry the failed nodes from the project's latest dbt run results.
+
+    No target or state options: dbt retry replays the failed invocation's own
+    arguments from run_results.json and ignores them on the command line.
+    """
+
+    environment_variables: Optional[Dict[str, str]] = None
+
+
+class DbtCloneRequest(BaseModel):
+    """Clone selected relations from a server-owned state target."""
+
+    project_id: str
+    state_target: str
+    target: Optional[str] = None
+    selector: Optional[str] = None
+    defer: bool = False
+    favor_state: bool = False
+    environment_variables: Optional[Dict[str, str]] = None
 
 
 class CompileRequest(BaseModel):

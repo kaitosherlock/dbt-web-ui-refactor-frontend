@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.services.project import ProjectService
+from app.services.state import StateService
 from app.services.storage_service import get_storage_service
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,15 @@ class ProjectRestoreRequest(BaseModel):
     """Request model for project restoration."""
 
     project_id: str
+
+
+def _delete_state(project_id: str) -> bool:
+    """Drop saved dbt state; a failure here must not block the deletion."""
+    try:
+        return StateService().delete_project(project_id)
+    except Exception as exc:
+        logger.warning(f"Could not remove dbt state for {project_id}: {exc}")
+        return False
 
 
 @router.post("/delete")
@@ -53,6 +63,7 @@ async def delete_project(request: ProjectDeleteRequest):
             storage_deleted = await storage_service.delete_from_storage(
                 request.project_id
             )
+            state_deleted = _delete_state(request.project_id)
 
             if not storage_deleted:
                 logger.warning(
@@ -63,6 +74,7 @@ async def delete_project(request: ProjectDeleteRequest):
                 "success": True,
                 "message": f"Project {request.project_id} permanently deleted",
                 "storage_cleaned": storage_deleted,
+                "state_cleaned": state_deleted,
             }
         else:
             # Soft delete: First sync current state, then mark as deleted
@@ -78,6 +90,7 @@ async def delete_project(request: ProjectDeleteRequest):
                 )
 
             storage_marked = await storage_service.mark_deleted(request.project_id)
+            state_deleted = _delete_state(request.project_id)
 
             if not storage_marked:
                 logger.warning(
@@ -88,6 +101,7 @@ async def delete_project(request: ProjectDeleteRequest):
                 "success": True,
                 "message": f"Project {request.project_id} moved to trash",
                 "storage_marked": storage_marked,
+                "state_cleaned": state_deleted,
             }
 
     except Exception as e:
