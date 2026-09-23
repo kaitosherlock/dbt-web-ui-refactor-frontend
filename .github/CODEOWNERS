@@ -2,3 +2,25 @@
 
 /.github/ @trangtoan293
 /dbt-runner/app/core/ @trangtoan293
+
+# Frontend (nextjs/src), per docs/frontend-refactor-plan.md mục 3.4: each
+# feature gets its own reviewer once assigned. Left at the default owner
+# above until real per-feature owners are picked — do not invent names here.
+# When assigning, uncomment and fill in one line per feature:
+# /nextjs/src/features/home/          @trangtoan293
+# /nextjs/src/features/projects/      @trangtoan293
+# /nextjs/src/features/develop/       @trangtoan293
+# /nextjs/src/features/git/           @trangtoan293
+# /nextjs/src/features/connections/   @trangtoan293
+# /nextjs/src/features/ingest/        @trangtoan293
+# /nextjs/src/features/lakehouse/     @trangtoan293
+# /nextjs/src/features/orchestrate/   @trangtoan293
+# /nextjs/src/features/explore/       @trangtoan293
+# /nextjs/src/features/assistant/     @trangtoan293
+# /nextjs/src/features/settings/      @trangtoan293
+# common/, entities/, server/ and eslint.config.mjs cut across every feature,
+# so they need a reviewer everyone on the frontend agrees on, not one owner:
+# /nextjs/src/common/       @trangtoan293
+# /nextjs/src/entities/     @trangtoan293
+# /nextjs/src/server/       @trangtoan293
+# /nextjs/eslint.config.mjs @trangtoan293
