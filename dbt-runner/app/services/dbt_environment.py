@@ -27,7 +27,7 @@ DBT_LAKE_CATALOG_PASSWORD_ENV = "DBT_ENV_SECRET_LAKE_CATALOG_PASSWORD"
 # Keep a complete baseline in case dbt changes its import layout or a partially
 # installed adapter makes CLI import fail. Discovery below adds new Click envvars
 # automatically when dbt is upgraded.
-FALLBACK_DBT_CLI_ENV_VARS = frozenset(
+_LEGACY_DBT_CLI_ENV_VARS = frozenset(
     {
         "DBT_ARTIFACT_STATE_PATH",
         "DBT_CACHE_SELECTED_ONLY",
@@ -90,15 +90,38 @@ FALLBACK_DBT_CLI_ENV_VARS = frozenset(
         "DBT_WRITE_JSON",
     }
 )
+FALLBACK_DBT_CLI_ENV_VARS = frozenset(
+    {
+        *_LEGACY_DBT_CLI_ENV_VARS,
+        *{
+            f"DBT_ENGINE_{name.removeprefix('DBT_')}"
+            for name in _LEGACY_DBT_CLI_ENV_VARS
+        },
+    }
+)
 
 
 def _add_envvar(target: set[str], envvar: object) -> None:
     if isinstance(envvar, str):
         target.add(envvar.upper())
+        return
+
+    # dbt 1.11 wraps its constrained DBT_ENGINE_* name and legacy alias in an
+    # EngineEnvVar object. Click exposes strings in most commands, but reading
+    # KNOWN_ENV_VARS must work independently so the fallback remains complete.
+    object_names = (
+        getattr(envvar, "name", None),
+        getattr(envvar, "old_name", None),
+    )
+    if any(isinstance(name, str) for name in object_names):
+        for name in object_names:
+            if isinstance(name, str):
+                target.add(name.upper())
+        return
+
     elif isinstance(envvar, Iterable):
         for item in envvar:
-            if isinstance(item, str):
-                target.add(item.upper())
+            _add_envvar(target, item)
 
 
 def _discover_dbt_cli_env_vars() -> frozenset[str]:

@@ -22,13 +22,17 @@ dependencies = [
     "pydantic>=2.12.5",
     "pydantic-settings>=2.12.0",
     "python-multipart>=0.0.21",
-    "dbt-core==1.10.23",
-    "dbt-dremio==1.10.1",
+    "dbt-core==1.11.8",
+    "dbt-dremio==1.11.0",
+    # dbt-postgres 1.11.0 requires dbt-adapters>=1.24.1, while
+    # dbt-databricks 1.11.8 requires dbt-adapters<1.23. Keep the newest
+    # compatible Postgres release until those upstream constraints overlap.
     "dbt-postgres==1.10.2",
-    "dbt-duckdb==1.10.1",
+    "dbt-duckdb==1.11.0",
     "dbt-charts==0.8.0",
-    "dbt-oracle==1.10.0",
-    "dbt-snowflake==1.10.8",
+    "dbt-oracle==1.11.1",
+    "dbt-snowflake==1.11.6",
+    "dbt-databricks==1.11.8",
     "gitpython>=3.1.45",
     "pyyaml>=6.0.03",
     "httpx>=0.28.1",

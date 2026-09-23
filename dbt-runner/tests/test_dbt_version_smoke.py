@@ -58,7 +58,7 @@ model-paths: [models]
             manifest = json.loads(
                 (project_path / "target" / "manifest.json").read_text()
             )
-            assert manifest["metadata"]["dbt_version"] == "1.10.23"
+            assert manifest["metadata"]["dbt_version"] == "1.11.8"
             assert "model.parity_smoke.sample" in manifest["nodes"]
         finally:
             cleanup_event_logger()

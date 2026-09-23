@@ -95,6 +95,15 @@ def test_unknown_resource_types_are_refused():
         dbt_cli.validate_resource_types(["model", "--project-dir"])
 
 
+def test_ls_resource_types_match_dbts_own_cli():
+    from dbt.cli.main import cli
+
+    parameter = next(
+        item for item in cli.commands["ls"].params if "--resource-type" in item.opts
+    )
+    assert dbt_cli.LS_RESOURCE_TYPES == frozenset(parameter.type.choices)
+
+
 @pytest.mark.asyncio
 async def test_ls_builds_json_argv_and_returns_rows(service):
     run = AsyncMock(return_value=(0, LS_STDOUT, ""))

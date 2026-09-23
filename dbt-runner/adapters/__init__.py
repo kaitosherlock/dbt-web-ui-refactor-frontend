@@ -10,6 +10,7 @@ from .dremio import DremioAdapter
 from .oracle import OracleAdapter
 from .spark import SparkAdapter
 from .snowflake import SnowflakeAdapter
+from .databricks import DatabricksAdapter
 
 # Every adapter here has its dbt plugin bundled in the dbt-runner image
 # (dbt-spark installs via the INSTALL_DBT_SPARK build arg). Keep this registry
@@ -22,6 +23,7 @@ ADAPTERS: Dict[str, type] = {
     "oracle": OracleAdapter,
     "spark": SparkAdapter,
     "snowflake": SnowflakeAdapter,
+    "databricks": DatabricksAdapter,
 }
 
 
@@ -53,6 +55,7 @@ __all__ = [
     "OracleAdapter",
     "SparkAdapter",
     "SnowflakeAdapter",
+    "DatabricksAdapter",
     "get_adapter",
     "list_adapters",
     "ADAPTERS",

@@ -38,7 +38,17 @@ class DbtEnvironmentPolicyTests(unittest.IsolatedAsyncioTestCase):
     def test_cli_envvars_are_discovered_from_installed_dbt(self):
         from dbt.cli import params as dbt_params
 
-        self.assertTrue(set(dbt_params.KNOWN_ENV_VARS) <= DBT_CLI_ENV_VARS)
+        expected = {
+            name
+            for envvar in dbt_params.KNOWN_ENV_VARS
+            for name in (
+                getattr(envvar, "name", envvar if isinstance(envvar, str) else None),
+                getattr(envvar, "old_name", None),
+            )
+            if name
+        }
+        self.assertTrue(expected <= DBT_CLI_ENV_VARS)
+        self.assertIn("DBT_ENGINE_PROJECT_DIR", FALLBACK_DBT_CLI_ENV_VARS)
         self.assertIn("DBT_PACKAGES_INSTALL_PATH", FALLBACK_DBT_CLI_ENV_VARS)
 
     def test_lake_secret_name_stays_in_the_server_owned_set(self):

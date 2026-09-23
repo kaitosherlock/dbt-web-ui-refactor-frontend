@@ -16,7 +16,7 @@ Claude subagents. Plan: `docs/codex/dbt-core-1x-parity.md`.
 | Phase | Commit | Notes |
 |---|---|---|
 | 0 security | d088e5a | `validate_dbt_argv` (app/services/command.py): subcommand allowlist, path flags refused. `app/services/dbt_environment.py`: client/persisted env may not set dbt CLI envvars or PATH/PYTHON*/LD_*; server env inherited unfiltered (keeps DBT_SEND_ANONYMOUS_USAGE_STATS=false). |
-| 1 upgrade | 85764c1 | dbt-core 1.10.23. 1.11+ blocked: dbt-dremio 1.10.1 supports only 1.10.x. |
+| 1 upgrade | 85764c1 | Originally stopped at dbt-core 1.10.23; reopened because dbt-dremio 1.11.0 now supports the 1.11 line. |
 | 2 enum | deferred | Prisma-owned (`nextjs/prisma`), out of scope. |
 
 ## In progress — Phase 3 (uncommitted, in working tree, unreviewed)

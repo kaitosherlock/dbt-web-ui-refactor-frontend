@@ -8,6 +8,7 @@ it from the account) is guarded the same way on all of them.
 
 from typing import Any, Dict
 
+from adapters import databricks as databricks_adapter
 from adapters import snowflake as snowflake_adapter
 from app.core.host_guard import HostNotAllowed, assert_host_allowed
 
@@ -19,8 +20,8 @@ HOSTLESS_TYPES = frozenset({"duckdb", "spark"})
 def target_endpoint(conn_type: str, config: Dict[str, Any]) -> tuple[str, int | None]:
     """(host, port) a connection of this type will dial, from its adapter config.
 
-    Raises HostNotAllowed for a Snowflake account that is not a valid account
-    identifier: an unvalidated one is an unvalidated host name.
+    Raises HostNotAllowed when an adapter-specific host identifier is invalid:
+    an unvalidated value is an unvalidated host name.
     """
     config = config or {}
     if conn_type == "snowflake":
@@ -29,6 +30,13 @@ def target_endpoint(conn_type: str, config: Dict[str, Any]) -> tuple[str, int | 
         except snowflake_adapter.SnowflakeConfigError as exc:
             raise HostNotAllowed(str(exc)) from exc
         return host, snowflake_adapter.SNOWFLAKE_PORT
+
+    if conn_type == "databricks":
+        try:
+            host = databricks_adapter.normalize_workspace_host(config.get("host"))
+        except databricks_adapter.DatabricksConfigError as exc:
+            raise HostNotAllowed(str(exc)) from exc
+        return host, databricks_adapter.DATABRICKS_PORT
 
     host = str(config.get("host") or "").strip()
     raw_port = config.get("port")
