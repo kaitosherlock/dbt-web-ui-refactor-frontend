@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CHART_TYPES, acceptsSeries, boardDiagnostics, boardEmpty, boardNeedsRender, boardSource, chartPayload, chartProblem, chartReady, diagnosticText, emptyChartDraft, suggestChart } from '@/lib/board'
+import { CHART_TYPES, acceptsSeries, boardDiagnostics, boardEmpty, boardNeedsRender, boardSource, chartPayload, chartProblem, chartReady, diagnosticText, emptyChartDraft, suggestChart } from '@/features/explore/model/board'
 
 describe('board diagnostics', () => {
   it('reads the engine diagnostics out of a 422 board response', () => {

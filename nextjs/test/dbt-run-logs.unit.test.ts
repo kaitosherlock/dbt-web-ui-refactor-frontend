@@ -7,7 +7,7 @@ import {
   parseDbtLogs,
   timingDurationMs,
   type DbtLogLevel,
-} from "@/lib/dbt-run-logs"
+} from "@/entities/run/model/dbt-run-logs"
 
 describe("dbt run log parsing", () => {
   it("normalizes dbt Core structured JSON events", () => {

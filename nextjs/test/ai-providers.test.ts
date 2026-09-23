@@ -7,7 +7,7 @@ import {
   resolveRoutes,
   upsertProvider,
   validateProvider,
-} from '@/lib/ai-providers'
+} from '@/features/settings/server'
 
 // crypto.ts reads this at call time. Set here rather than in .env.test so the
 // test is self-contained: it is exercising encryption, not a local setup.

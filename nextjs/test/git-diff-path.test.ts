@@ -3,7 +3,7 @@ import {
   buildGitShowHeadCommand,
   normalizeGitRevisionPath,
   quoteGitRevision,
-} from "../src/lib/git/diffPath";
+} from "../src/features/git/model/diffPath";
 
 describe("git diff path helpers", () => {
   it("keeps the full project-relative path for files in nested folders", () => {

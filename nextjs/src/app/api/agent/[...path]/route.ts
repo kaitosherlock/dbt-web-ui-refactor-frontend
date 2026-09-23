@@ -1,5 +1,5 @@
 import { proxyRequest } from '@/server/proxy'
-import { resolveRoutes } from '@/lib/ai-providers'
+import { resolveRoutes } from '@/features/settings/server'
 import { getSessionOrNull } from '@/server/session'
 
 /**

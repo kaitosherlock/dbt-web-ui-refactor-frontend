@@ -4,7 +4,7 @@ import {
   createProviderDraft,
   draftToProviderInput,
   validateProviderDraft,
-} from "@/lib/ai-provider-form"
+} from "@/features/settings/model/ai-provider-form"
 
 describe("AI provider settings form", () => {
   it("starts a built-in provider with implementation details derived automatically", () => {

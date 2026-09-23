@@ -5,7 +5,7 @@ import {
   getIngestSources,
   updateIngestSource,
 } from '@/features/ingest/server'
-import type { IngestSourceInput } from '@/lib/ingest-source-validation'
+import type { IngestSourceInput } from '@/features/ingest/model/ingest-source-validation'
 
 function errorResponse(err: unknown) {
   const msg = err instanceof Error ? err.message : 'Unknown error'

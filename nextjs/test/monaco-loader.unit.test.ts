@@ -1,4 +1,4 @@
-import { configureMonacoLoader } from "@/lib/monaco-loader"
+import { configureMonacoLoader } from "@/common/lib/monaco-loader"
 import { createSecurityHeaders } from "../next.config"
 
 describe("local Monaco loader", () => {

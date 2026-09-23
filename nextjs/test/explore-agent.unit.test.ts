@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { exploreAgentContext, exploreFileView } from '@/lib/explore-agent'
+import { exploreAgentContext, exploreFileView } from '@/features/assistant/model/explore-agent'
 
 describe('exploreAgentContext', () => {
   it('names the dashboard tools so the agent does not invent board YAML', () => {
