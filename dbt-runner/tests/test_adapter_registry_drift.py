@@ -20,7 +20,7 @@ from adapters import ADAPTERS
 
 DIALOG = (
     Path(__file__).resolve().parents[2]
-    / "nextjs/src/components/connections/ConnectionDialog.tsx"
+    / "nextjs/src/features/connections/components/ConnectionDialog.tsx"
 )
 
 # Connection types the form offers that are deliberately not warehouses: a
@@ -32,7 +32,7 @@ NOT_WAREHOUSES = {"ducklake", "mysql", "rest"}
 # Registry entries whose form is a pending frontend follow-up. Remove a name
 # here in the same change that adds it to ConnectionDialog.tsx - the strict
 # xfail below turns into a failure until you do.
-PENDING_IN_DIALOG = {"snowflake", "databricks"}
+PENDING_IN_DIALOG: set[str] = set()
 
 
 def _dialog_types() -> set[str]:

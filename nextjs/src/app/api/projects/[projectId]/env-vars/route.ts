@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { db } from '@/server/db'
 import { encryptSecret } from '@/server/crypto'
 import { getSessionOrNull } from '@/server/session'
+import { validateEnvVarName } from '@/features/projects'
 
-const ENV_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/
 const TYPES = new Set(['text', 'password'])
 
 interface EnvVarInput {
@@ -84,8 +84,9 @@ export async function PUT(
   for (const item of body as EnvVarInput[]) {
     const name = typeof item.name === 'string' ? item.name.trim() : ''
     if (!name) continue
-    if (!ENV_NAME_RE.test(name)) {
-      return NextResponse.json({ error: `Invalid environment variable name: ${name}` }, { status: 400 })
+    const validation = validateEnvVarName(name)
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
     }
     if (seen.has(name)) {
       return NextResponse.json({ error: `Duplicate environment variable name: ${name}` }, { status: 400 })

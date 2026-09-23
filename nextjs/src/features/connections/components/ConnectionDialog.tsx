@@ -6,12 +6,19 @@ import { Button } from "@/common/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/common/ui/dialog"
 import { Input } from "@/common/ui/input"
 import { createConnection, updateConnection } from "../api"
+import {
+  normalizeSnowflakeAccount,
+  snowflakeAccountHost,
+  normalizeDatabricksHost,
+  normalizeDatabricksHttpPath,
+} from "../model/validation"
 
 type ConnectionType =
   | "postgresql" | "duckdb" | "dremio" | "oracle" | "spark" | "ducklake"
   // Read-only ingest sources. Neither has a dbt adapter, so neither can be a
   // project's warehouse - dbt-runner refuses that with a message.
   | "mysql" | "rest"
+  | "snowflake" | "databricks"
 
 /** Types that exist to be read from, never run against. */
 const SOURCE_ONLY_TYPES: ReadonlySet<string> = new Set(["mysql", "rest"])
@@ -48,6 +55,8 @@ const TYPE_LABELS: Record<ConnectionType, string> = {
   ducklake: "Lakehouse",
   mysql: "MySQL",
   rest: "REST API",
+  snowflake: "Snowflake",
+  databricks: "Databricks",
 }
 
 const DEFAULT_PORTS: Record<ConnectionType, number> = {
@@ -59,6 +68,8 @@ const DEFAULT_PORTS: Record<ConnectionType, number> = {
   ducklake: 5432,
   mysql: 3306,
   rest: 443,
+  snowflake: 443,
+  databricks: 443,
 }
 
 const SELECT_CLS = "flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:border-[#0078D4] focus-visible:ring-1 focus-visible:ring-[#0078D4]"
@@ -81,6 +92,8 @@ function defaultForm() {
 const THREADS_HINT: Partial<Record<ConnectionType, string>> = {
   dremio: "1 by default. A coordinator with a large catalog answers every dbt "
     + "list_relations with a full information_schema scan, so each thread is one more scan.",
+  snowflake: "4 by default.",
+  databricks: "4 by default.",
 }
 
 function defaultDremio() {
@@ -122,6 +135,25 @@ function defaultRest() {
   }
 }
 
+function defaultSnowflake() {
+  return {
+    account: "",
+    auth_type: "password" as "password" | "keypair",
+    role: "",
+    warehouse: "",
+    secondary_secret: "",
+  }
+}
+
+function defaultDatabricks() {
+  return {
+    auth_type: "pat" as "pat" | "oauth_m2m",
+    http_path: "",
+    client_id: "",
+    secondary_secret: "",
+  }
+}
+
 function defaultSpark() {
   return {
     method: "session",
@@ -158,7 +190,9 @@ export default function ConnectionDialog({ onSaved, onClose, existing, trigger }
     existing?.connectionType === "spark" ? "spark" :
     existing?.connectionType === "ducklake" ? "ducklake" :
     existing?.connectionType === "mysql" ? "mysql" :
-    existing?.connectionType === "rest" ? "rest" : "postgresql"
+    existing?.connectionType === "rest" ? "rest" :
+    existing?.connectionType === "snowflake" ? "snowflake" :
+    existing?.connectionType === "databricks" ? "databricks" : "postgresql"
   const [type, setType] = useState<ConnectionType>(initialType)
   const [typeSelected, setTypeSelected] = useState(isEdit)
   const [form, setForm] = useState(defaultForm())
@@ -167,6 +201,8 @@ export default function ConnectionDialog({ onSaved, onClose, existing, trigger }
   const [spark, setSpark] = useState(defaultSpark())
   const [lake, setLake] = useState(defaultLake())
   const [rest, setRest] = useState(defaultRest())
+  const [snowflake, setSnowflake] = useState(defaultSnowflake())
+  const [databricks, setDatabricks] = useState(defaultDatabricks())
 
   useEffect(() => {
     if (!open) return
@@ -187,6 +223,8 @@ export default function ConnectionDialog({ onSaved, onClose, existing, trigger }
         })
         setDremio({ ...defaultDremio() })
         setOracle({ ...defaultOracle() })
+        setSnowflake(defaultSnowflake())
+        setDatabricks(defaultDatabricks())
       } else {
         setForm({
           name: existing.name,
@@ -230,6 +268,23 @@ export default function ConnectionDialog({ onSaved, onClose, existing, trigger }
         } else if (existing.connectionType === "oracle") {
           const ec = (existing.extraConfig ?? {}) as Record<string, unknown>
           setOracle({ schema: (ec.schema as string) ?? "" })
+        } else if (existing.connectionType === "snowflake") {
+          const ec = (existing.extraConfig ?? {}) as Record<string, unknown>
+          setSnowflake({
+            account: (ec.account as string) ?? "",
+            auth_type: (ec.auth_type as "password" | "keypair") ?? "password",
+            role: (ec.role as string) ?? "",
+            warehouse: (ec.warehouse as string) ?? "",
+            secondary_secret: "",
+          })
+        } else if (existing.connectionType === "databricks") {
+          const ec = (existing.extraConfig ?? {}) as Record<string, unknown>
+          setDatabricks({
+            auth_type: (ec.auth_type as "pat" | "oauth_m2m") ?? "pat",
+            http_path: (ec.http_path as string) ?? "",
+            client_id: (ec.client_id as string) ?? "",
+            secondary_secret: "",
+          })
         } else if (existing.connectionType === "spark") {
           const ec = (existing.extraConfig ?? {}) as Record<string, unknown>
           const params = (ec.server_side_parameters ?? {}) as Record<string, unknown>
@@ -265,6 +320,8 @@ export default function ConnectionDialog({ onSaved, onClose, existing, trigger }
       setOracle(defaultOracle())
       setSpark(defaultSpark())
       setRest(defaultRest())
+      setSnowflake(defaultSnowflake())
+      setDatabricks(defaultDatabricks())
     }
     setError("")
   }, [open, existing, initialType])
@@ -280,7 +337,7 @@ export default function ConnectionDialog({ onSaved, onClose, existing, trigger }
   }
 
   function setF(field: keyof typeof form) {
-    return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setForm((f) => ({ ...f, [field]: e.target.value }))
   }
 
@@ -302,6 +359,16 @@ export default function ConnectionDialog({ onSaved, onClose, existing, trigger }
   function setS(field: keyof typeof spark) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
       setSpark((s) => ({ ...s, [field]: e.target.value }))
+  }
+
+  function setSF(field: keyof typeof snowflake) {
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+      setSnowflake((s) => ({ ...s, [field]: e.target.value }))
+  }
+
+  function setDB(field: keyof typeof databricks) {
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+      setDatabricks((d) => ({ ...d, [field]: e.target.value }))
   }
 
   function sparkParamsObject() {
@@ -539,6 +606,70 @@ export default function ConnectionDialog({ onSaved, onClose, existing, trigger }
         } else {
           await createConnection({ ...payload, passwordEncrypted: form.credential })
         }
+      } else if (type === "snowflake") {
+        const cleanAccount = normalizeSnowflakeAccount(snowflake.account)
+        const host = snowflakeAccountHost(cleanAccount)
+        const extraConfig: Record<string, unknown> = {
+          account: cleanAccount,
+          auth_type: snowflake.auth_type,
+        }
+        if (snowflake.role.trim()) extraConfig.role = snowflake.role.trim()
+        if (snowflake.warehouse.trim()) extraConfig.warehouse = snowflake.warehouse.trim()
+        if (form.schema.trim()) extraConfig.schema = form.schema.trim()
+        if (snowflake.auth_type === "keypair" && snowflake.secondary_secret.trim()) {
+          extraConfig.secondary_secret_encrypted = snowflake.secondary_secret.trim()
+        }
+        applyThreads(extraConfig)
+
+        const payload: Record<string, unknown> = {
+          connectionType: "snowflake",
+          name: form.name,
+          host,
+          port: form.port ? Number(form.port) : 443,
+          database: form.database.trim(),
+          username: form.username.trim(),
+          extraConfig,
+        }
+        if (form.credential) payload.passwordEncrypted = form.credential
+        if (isEdit && existing) {
+          await updateConnection(existing.id, "connection", payload)
+        } else {
+          await createConnection({ ...payload, passwordEncrypted: form.credential })
+        }
+      } else if (type === "databricks") {
+        const cleanHost = normalizeDatabricksHost(form.host)
+        const cleanHttpPath = normalizeDatabricksHttpPath(databricks.http_path)
+        const extraConfig: Record<string, unknown> = {
+          auth_type: databricks.auth_type,
+          http_path: cleanHttpPath,
+        }
+        if (databricks.auth_type === "oauth_m2m") {
+          if (!databricks.client_id.trim()) {
+            throw new Error("Client ID is required for Databricks OAuth M2M authentication.")
+          }
+          extraConfig.client_id = databricks.client_id.trim()
+          if (databricks.secondary_secret.trim()) {
+            extraConfig.secondary_secret_encrypted = databricks.secondary_secret.trim()
+          }
+        }
+        if (form.schema.trim()) extraConfig.schema = form.schema.trim()
+        applyThreads(extraConfig)
+
+        const payload: Record<string, unknown> = {
+          connectionType: "databricks",
+          name: form.name,
+          host: cleanHost,
+          port: form.port ? Number(form.port) : 443,
+          database: form.database.trim(),
+          username: "",
+          extraConfig,
+        }
+        if (form.credential) payload.passwordEncrypted = form.credential
+        if (isEdit && existing) {
+          await updateConnection(existing.id, "connection", payload)
+        } else {
+          await createConnection({ ...payload, passwordEncrypted: form.credential })
+        }
       } else {
         const extraConfig: Record<string, unknown> = {}
         if (form.schema) extraConfig.schema = form.schema
@@ -604,6 +735,18 @@ export default function ConnectionDialog({ onSaved, onClose, existing, trigger }
                   title="DuckDB"
                   description="Local DuckDB file path for lightweight dbt projects."
                   onClick={() => chooseType("duckdb")}
+                />
+                <ConnectionTypeOption
+                  icon={Database}
+                  title="Snowflake"
+                  description="Snowflake Data Cloud warehouse via account identifier, role, and warehouse."
+                  onClick={() => chooseType("snowflake")}
+                />
+                <ConnectionTypeOption
+                  icon={Zap}
+                  title="Databricks"
+                  description="Databricks SQL warehouse or all-purpose compute via HTTP path and PAT or OAuth."
+                  onClick={() => chooseType("databricks")}
                 />
                 <ConnectionTypeOption
                   icon={Database}
@@ -817,7 +960,7 @@ export default function ConnectionDialog({ onSaved, onClose, existing, trigger }
 
             {/* Threads is how many models dbt builds at once, so it means
                 nothing for a type dbt never runs against. */}
-            {type !== "spark" && !SOURCE_ONLY_TYPES.has(type) && !isDremioSourceEdit && (
+            {type !== "spark" && type !== "snowflake" && type !== "databricks" && !SOURCE_ONLY_TYPES.has(type) && !isDremioSourceEdit && (
               <Field label="Threads" hint={THREADS_HINT[type] ?? "How many models dbt builds at once. Blank uses the default."}>
                 <Input
                   type="number"
@@ -1077,6 +1220,237 @@ export default function ConnectionDialog({ onSaved, onClose, existing, trigger }
                     <textarea value={spark.importText} onChange={setS("importText")} className={`${SELECT_CLS} min-h-20 py-2`} placeholder='{"spark.remote":"sc://host:15002"}' />
                     <Button type="button" variant="outline" onClick={importSparkParams}>Import JSON</Button>
                   </div>
+                </div>
+              </>
+            )}
+
+            {type === "snowflake" && !isDremioSourceEdit && (
+              <>
+                <Field
+                  label="Account Identifier"
+                  required
+                  hint="Account locator or Org-Account, e.g. 'xy12345.us-east-1' or 'myorg-myaccount'. Do not include 'https://' or '.snowflakecomputing.com'."
+                >
+                  <Input
+                    value={snowflake.account}
+                    onChange={setSF("account")}
+                    placeholder="xy12345.us-east-1"
+                    required
+                  />
+                </Field>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Database" required>
+                    <Input
+                      value={form.database}
+                      onChange={setF("database")}
+                      placeholder="ANALYTICS"
+                      required
+                    />
+                  </Field>
+                  <Field label="Schema">
+                    <Input
+                      value={form.schema}
+                      onChange={setF("schema")}
+                      placeholder="PUBLIC"
+                    />
+                  </Field>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <Field label="Warehouse">
+                    <Input
+                      value={snowflake.warehouse}
+                      onChange={setSF("warehouse")}
+                      placeholder="COMPUTE_WH"
+                    />
+                  </Field>
+                  <Field label="Role">
+                    <Input
+                      value={snowflake.role}
+                      onChange={setSF("role")}
+                      placeholder="TRANSFORMER"
+                    />
+                  </Field>
+                  <Field label="Threads" hint={THREADS_HINT.snowflake}>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={32}
+                      value={form.threads}
+                      onChange={setF("threads")}
+                      placeholder="1"
+                    />
+                  </Field>
+                </div>
+
+                <Field label="Username" required>
+                  <Input
+                    value={form.username}
+                    onChange={setF("username")}
+                    placeholder="dbt_user"
+                    required
+                  />
+                </Field>
+
+                <div className="border-t border-gray-100 pt-3">
+                  <p className="mb-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Authentication</p>
+                  <Field label="Auth Type" required>
+                    <select
+                      value={snowflake.auth_type}
+                      onChange={setSF("auth_type")}
+                      className={SELECT_CLS}
+                    >
+                      <option value="password">Password</option>
+                      <option value="keypair">Key Pair (Private Key)</option>
+                    </select>
+                  </Field>
+
+                  {snowflake.auth_type === "password" ? (
+                    <Field label={isEdit ? "Password (leave blank to keep)" : "Password"} required={!isEdit}>
+                      <Input
+                        type="password"
+                        value={form.credential}
+                        onChange={setF("credential")}
+                        placeholder={isEdit ? "••••••••" : ""}
+                        required={!isEdit}
+                      />
+                    </Field>
+                  ) : (
+                    <>
+                      <Field
+                        label={isEdit ? "Private Key PEM (leave blank to keep)" : "Private Key PEM"}
+                        required={!isEdit}
+                        hint="Unencrypted or encrypted PKCS#8 private key in PEM format."
+                      >
+                        <textarea
+                          value={form.credential}
+                          onChange={setF("credential")}
+                          className={`${SELECT_CLS} min-h-24 py-2 font-mono text-xs`}
+                          placeholder={isEdit ? "•••••••• (unchanged)" : "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"}
+                          required={!isEdit}
+                        />
+                      </Field>
+                      <Field
+                        label={isEdit ? "Private Key Passphrase (leave blank to keep)" : "Private Key Passphrase"}
+                        hint="Optional passphrase if your private key is encrypted."
+                      >
+                        <Input
+                          type="password"
+                          value={snowflake.secondary_secret}
+                          onChange={setSF("secondary_secret")}
+                          placeholder={isEdit ? "•••••••• (leave blank to keep existing)" : "Optional"}
+                        />
+                      </Field>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+
+            {type === "databricks" && !isDremioSourceEdit && (
+              <>
+                <Field
+                  label="Server Hostname"
+                  required
+                  hint="Databricks workspace hostname (e.g. dbc-xxxx.cloud.databricks.com or adb-xxxx.azuredatabricks.net). Do not include https:// or path."
+                >
+                  <Input
+                    value={form.host}
+                    onChange={setF("host")}
+                    placeholder="dbc-xxxx.cloud.databricks.com"
+                    required
+                  />
+                </Field>
+
+                <Field
+                  label="HTTP Path"
+                  required
+                  hint="Found in SQL Warehouse Connection Details, e.g. /sql/1.0/warehouses/0123456789abcdef or /sql/protocolv1/o/..."
+                >
+                  <Input
+                    value={databricks.http_path}
+                    onChange={setDB("http_path")}
+                    placeholder="/sql/1.0/warehouses/0123456789abcdef"
+                    required
+                  />
+                </Field>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <Field label="Catalog" hint="Unity Catalog (optional)">
+                    <Input
+                      value={form.database}
+                      onChange={setF("database")}
+                      placeholder="main"
+                    />
+                  </Field>
+                  <Field label="Schema" hint="Default schema (optional)">
+                    <Input
+                      value={form.schema}
+                      onChange={setF("schema")}
+                      placeholder="default"
+                    />
+                  </Field>
+                  <Field label="Threads" hint={THREADS_HINT.databricks}>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={32}
+                      value={form.threads}
+                      onChange={setF("threads")}
+                      placeholder="4"
+                    />
+                  </Field>
+                </div>
+
+                <div className="border-t border-gray-100 pt-3">
+                  <p className="mb-3 text-xs font-medium text-gray-500 uppercase tracking-wide">Authentication</p>
+                  <Field label="Auth Type" required>
+                    <select
+                      value={databricks.auth_type}
+                      onChange={setDB("auth_type")}
+                      className={SELECT_CLS}
+                    >
+                      <option value="pat">Personal Access Token (PAT)</option>
+                      <option value="oauth_m2m">OAuth M2M (Service Principal)</option>
+                    </select>
+                  </Field>
+
+                  {databricks.auth_type === "pat" ? (
+                    <Field label={isEdit ? "Personal Access Token (leave blank to keep)" : "Personal Access Token"} required={!isEdit}>
+                      <Input
+                        type="password"
+                        value={form.credential}
+                        onChange={setF("credential")}
+                        placeholder={isEdit ? "••••••••" : "dapi..."}
+                        required={!isEdit}
+                      />
+                    </Field>
+                  ) : (
+                    <>
+                      <Field label="Client ID" required hint="Databricks Service Principal Application ID">
+                        <Input
+                          value={databricks.client_id}
+                          onChange={setDB("client_id")}
+                          placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                          required
+                        />
+                      </Field>
+                      <Field
+                        label={isEdit ? "Client Secret (leave blank to keep)" : "Client Secret"}
+                        required={!isEdit}
+                        hint="Databricks OAuth secret"
+                      >
+                        <Input
+                          type="password"
+                          value={databricks.secondary_secret}
+                          onChange={setDB("secondary_secret")}
+                          placeholder={isEdit ? "•••••••• (leave blank to keep existing)" : "Secret"}
+                          required={!isEdit}
+                        />
+                      </Field>
+                    </>
+                  )}
                 </div>
               </>
             )}

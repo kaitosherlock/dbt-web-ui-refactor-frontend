@@ -293,6 +293,8 @@ enum ConnectionType {
   /// against them, in the same way it never runs against `ducklake`.
   mysql
   rest
+  snowflake
+  databricks
 
   @@map("connection_type")
 }

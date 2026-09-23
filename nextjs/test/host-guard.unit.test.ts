@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { HostNotAllowed, assertUrlHostAllowed } from '@/server/host-guard'
+import { HostNotAllowed, assertUrlHostAllowed, assertHostAllowed } from '@/server/host-guard'
 
 // Literal addresses only: isIP short-circuits the lookup, so the suite needs no
 // DNS and no network.
@@ -44,3 +44,34 @@ describe('assertUrlHostAllowed', () => {
     await expect(assertUrlHostAllowed('https://8.8.8.8/v1')).resolves.toBeUndefined()
   })
 })
+
+describe('assertHostAllowed', () => {
+  it('refuses an empty host', async () => {
+    await expect(assertHostAllowed('')).rejects.toThrow(HostNotAllowed)
+    await expect(assertHostAllowed('   ')).rejects.toThrow(HostNotAllowed)
+  })
+
+  it('refuses loopback IP directly', async () => {
+    await expect(assertHostAllowed('127.0.0.1')).rejects.toThrow(/loopback/)
+    await expect(assertHostAllowed('::1')).rejects.toThrow(/loopback/)
+  })
+
+  it('refuses cloud metadata IP directly', async () => {
+    await expect(assertHostAllowed('169.254.169.254')).rejects.toThrow(/metadata/)
+  })
+
+  it('refuses private LAN address until opted in', async () => {
+    await expect(assertHostAllowed('10.0.0.1')).rejects.toThrow(/private address/)
+    process.env.AI_PROVIDER_ALLOW_PRIVATE_HOSTS = 'true'
+    try {
+      await expect(assertHostAllowed('10.0.0.1')).resolves.toBeUndefined()
+    } finally {
+      delete process.env.AI_PROVIDER_ALLOW_PRIVATE_HOSTS
+    }
+  })
+
+  it('allows public IP address', async () => {
+    await expect(assertHostAllowed('8.8.8.8')).resolves.toBeUndefined()
+  })
+})
+

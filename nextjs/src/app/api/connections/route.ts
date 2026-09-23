@@ -2,8 +2,27 @@ import { NextResponse } from 'next/server'
 import { getConnections, createConnection, deleteConnection, getDremioSources, deleteDremioSource, updateConnection, updateDremioSource, getConnectionById } from '@/features/connections/server'
 import { auth } from '@/server/auth/auth'
 import { checkLakehouse, releaseLakehouse, LAKEHOUSE_TYPE, type LakehouseMode } from '@/features/lakehouse/model/lakehouse'
+import { assertHostAllowed, HostNotAllowed } from '@/server/host-guard'
+import {
+  normalizeSnowflakeAccount,
+  snowflakeAccountHost,
+  normalizeDatabricksHost,
+  normalizeDatabricksHttpPath,
+  ConnectionValidationError,
+} from '@/features/connections/model/validation'
 
-const CONNECTION_TYPES = new Set(['postgresql', 'duckdb', 'dremio', 'oracle', 'spark', LAKEHOUSE_TYPE])
+const CONNECTION_TYPES = new Set([
+  'postgresql',
+  'duckdb',
+  'dremio',
+  'oracle',
+  'spark',
+  'snowflake',
+  'databricks',
+  'mysql',
+  'rest',
+  LAKEHOUSE_TYPE,
+])
 
 async function accessToken(): Promise<string | undefined> {
   const session = await auth()
@@ -45,11 +64,37 @@ async function lakehouseExtraConfig(
   return { ok: true, extraConfig: result.extraConfig ?? {} }
 }
 
-function omitSecrets<T extends Record<string, unknown>>(row: T) {
-  const safe = { ...row }
+async function validateAndGuardConnection(body: Record<string, unknown>): Promise<void> {
+  if (body.connectionType === 'snowflake') {
+    const extra = (body.extraConfig ?? {}) as Record<string, unknown>
+    const normalizedAccount = normalizeSnowflakeAccount(extra.account)
+    extra.account = normalizedAccount
+    const derivedHost = snowflakeAccountHost(normalizedAccount)
+    body.host = derivedHost
+    body.port = 443
+    await assertHostAllowed(derivedHost)
+  } else if (body.connectionType === 'databricks') {
+    const extra = (body.extraConfig ?? {}) as Record<string, unknown>
+    const normalizedHost = normalizeDatabricksHost(body.host)
+    body.host = normalizedHost
+    body.port = 443
+    if (extra.http_path) {
+      extra.http_path = normalizeDatabricksHttpPath(extra.http_path)
+    }
+    await assertHostAllowed(normalizedHost)
+  }
+}
+
+function omitSecrets<T extends Record<string, unknown>>(row: T): T {
+  const safe: Record<string, unknown> = { ...row }
   delete safe.passwordEncrypted
   delete safe.tokenEncrypted
-  return safe
+  if (safe.extraConfig && typeof safe.extraConfig === 'object') {
+    const safeExtra = { ...(safe.extraConfig as Record<string, unknown>) }
+    delete safeExtra.secondary_secret_encrypted
+    safe.extraConfig = safeExtra
+  }
+  return safe as T
 }
 
 export async function GET() {
@@ -80,6 +125,7 @@ export async function POST(req: Request) {
         { status: 400 },
       )
     }
+    await validateAndGuardConnection(body)
     if (body.connectionType === LAKEHOUSE_TYPE) {
       const id = crypto.randomUUID()
       const checked = await lakehouseExtraConfig(body, id)
@@ -90,6 +136,9 @@ export async function POST(req: Request) {
     const conn = await createConnection(body)
     return NextResponse.json({ ...omitSecrets(conn), _sourceTable: 'connection' as const })
   } catch (err: unknown) {
+    if (err instanceof ConnectionValidationError || err instanceof HostNotAllowed) {
+      return NextResponse.json({ error: err.message }, { status: 400 })
+    }
     const msg = err instanceof Error ? err.message : 'Unknown error'
     if (msg === 'Not authenticated') return NextResponse.json({ error: msg }, { status: 401 })
     return NextResponse.json({ error: msg }, { status: 500 })
@@ -160,6 +209,9 @@ export async function PUT(req: Request) {
       })
       return NextResponse.json({ ...omitSecrets(updated), _sourceTable: 'dremio_source' as const, connectionType: 'dremio' as const })
     }
+    if (body.connectionType) {
+      await validateAndGuardConnection(body)
+    }
     let extraConfig = body.extraConfig
     if (body.connectionType === LAKEHOUSE_TYPE) {
       const checked = await lakehouseExtraConfig(body, id)
@@ -179,6 +231,9 @@ export async function PUT(req: Request) {
     })
     return NextResponse.json({ ...omitSecrets(updated), _sourceTable: 'connection' as const })
   } catch (err: unknown) {
+    if (err instanceof ConnectionValidationError || err instanceof HostNotAllowed) {
+      return NextResponse.json({ error: err.message }, { status: 400 })
+    }
     const msg = err instanceof Error ? err.message : 'Unknown error'
     if (msg === 'Not authenticated') return NextResponse.json({ error: msg }, { status: 401 })
     if (msg === 'Not found or not authorized') return NextResponse.json({ error: msg }, { status: 404 })

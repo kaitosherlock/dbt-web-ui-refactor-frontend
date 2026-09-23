@@ -40,6 +40,11 @@ const TYPE_LABELS: Record<string, string> = {
   dremio: "Dremio",
   oracle: "Oracle",
   spark: "Apache Spark",
+  ducklake: "Lakehouse",
+  mysql: "MySQL",
+  rest: "REST API",
+  snowflake: "Snowflake",
+  databricks: "Databricks",
 }
 
 export default function ConnectionsView() {
