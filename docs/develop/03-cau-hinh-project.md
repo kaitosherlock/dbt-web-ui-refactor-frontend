@@ -1,7 +1,7 @@
 # 03 — Cấu hình project
 
-> Tham chiếu: `nextjs/src/components-v2/develop/NewProjectForm.tsx`,
-> `develop/settings/{ProjectSettingsDialog,TargetsPanel,EnvVarsPanel,LakehousePanel}.tsx`,
+> Tham chiếu: `nextjs/src/features/projects/components/NewProjectForm.tsx`,
+> `features/projects/components/{ProjectSettingsDialog,TargetsPanel,EnvVarsPanel,LakehousePanel}.tsx`,
 > `dbt-runner/app/services/dbt_service.py` (`_regenerate_profiles_from_db`, `_render_target`),
 > `nextjs/prisma/schema.prisma`.
 
