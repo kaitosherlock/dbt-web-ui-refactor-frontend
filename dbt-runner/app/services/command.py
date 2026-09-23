@@ -137,10 +137,12 @@ MAX_VARS_BYTES = 16 * 1024
 MAX_ARGS_BYTES = 16 * 1024
 
 VARS_COMMANDS = ALLOWED_DBT_SUBCOMMANDS
-EMPTY_COMMANDS = frozenset({"run", "build"})
+EMPTY_COMMANDS = frozenset({"run", "build", "compile", "snapshot"})
 SAMPLE_COMMANDS = frozenset({"run", "build"})
 EVENT_TIME_COMMANDS = frozenset({"run", "build"})
-FULL_REFRESH_COMMANDS = frozenset({"run", "build", "seed"})
+FULL_REFRESH_COMMANDS = frozenset(
+    {"run", "build", "clone", "compile", "retry", "seed", "show"}
+)
 SELECTOR_COMMANDS = frozenset(
     {
         "run",
@@ -155,6 +157,7 @@ SELECTOR_COMMANDS = frozenset(
         "clone",
         "docs generate",
         "source freshness",
+        "source snapshot-freshness",
     }
 )
 

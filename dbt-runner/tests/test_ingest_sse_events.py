@@ -57,6 +57,14 @@ def _frames(body: str) -> list[dict]:
     ]
 
 
+class _AsyncContext:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_args):
+        return False
+
+
 class IngestSseTest(unittest.TestCase):
     def setUp(self):
         app.dependency_overrides[require_user] = lambda: {
@@ -91,6 +99,14 @@ class IngestSseTest(unittest.TestCase):
             ),
             patch.object(
                 ingest_router, "_RunRecorder", MagicMock(return_value=self.recorder)
+            ),
+            # This file tests SSE framing and run recording, not distributed
+            # capacity. It must not need a live Redis server to reach the
+            # mocked ingest process.
+            patch.object(
+                ingest_router,
+                "global_run_semaphore",
+                MagicMock(return_value=_AsyncContext()),
             ),
             patch("app.core.db.get_session"),
         ]

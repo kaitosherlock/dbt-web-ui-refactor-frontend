@@ -63,7 +63,8 @@ def _dbt_command_options():
 )
 def test_option_tables_match_dbts_own_cli(commands, flag):
     dbt_options = _dbt_command_options()
-    for name in getattr(command_module, commands):
+    configured = getattr(command_module, commands)
+    for name in configured:
         if name in {"docs", "source"}:
             # Groups: every subcommand of `dbt docs` / `dbt source` takes --vars.
             members = [full for full in dbt_options if full.startswith(f"{name} ")]
@@ -71,6 +72,18 @@ def test_option_tables_match_dbts_own_cli(commands, flag):
             continue
         assert name in dbt_options, name
         assert flag in dbt_options[name], f"dbt {name} has no {flag}"
+
+    # The command-specific tables are exact for the server's allowed leaf
+    # commands. VARS_COMMANDS intentionally names the docs/source groups, whose
+    # members are checked above, instead of every leaf separately.
+    if commands != "VARS_COMMANDS":
+        supported = {
+            name
+            for name, options in dbt_options.items()
+            if flag in options
+            and name.split()[0] in command_module.ALLOWED_DBT_SUBCOMMANDS
+        }
+        assert configured == supported
 
 
 # ---- vars --------------------------------------------------------------------

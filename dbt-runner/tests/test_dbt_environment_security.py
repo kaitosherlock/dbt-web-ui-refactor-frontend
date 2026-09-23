@@ -49,6 +49,7 @@ class DbtEnvironmentPolicyTests(unittest.IsolatedAsyncioTestCase):
         }
         self.assertTrue(expected <= DBT_CLI_ENV_VARS)
         self.assertIn("DBT_ENGINE_PROJECT_DIR", FALLBACK_DBT_CLI_ENV_VARS)
+        self.assertIn("DBT_ENGINE_SQLPARSE", FALLBACK_DBT_CLI_ENV_VARS)
         self.assertIn("DBT_PACKAGES_INSTALL_PATH", FALLBACK_DBT_CLI_ENV_VARS)
 
     def test_lake_secret_name_stays_in_the_server_owned_set(self):

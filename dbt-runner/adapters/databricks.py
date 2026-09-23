@@ -297,22 +297,29 @@ class DatabricksAdapter(BaseAdapter):
 
     async def extract_schema(self) -> Dict[str, List[Table]]:
         """Browse the active catalog in two information_schema round trips."""
-        await self.connect()
         try:
-            relations = await self._query(
-                "SELECT table_schema, table_name, table_type "
-                "FROM information_schema.tables "
-                "WHERE table_catalog = current_catalog() "
-                "AND lower(table_schema) <> 'information_schema' "
-                "ORDER BY table_schema, table_name"
-            )
-            column_rows = await self._query(
-                self._COLUMNS_SQL + " WHERE table_catalog = current_catalog() "
-                "AND lower(table_schema) <> 'information_schema' "
-                "ORDER BY table_schema, table_name, ordinal_position"
-            )
-        finally:
-            await self.disconnect()
+            await self.connect()
+            try:
+                relations = await self._query(
+                    "SELECT table_schema, table_name, table_type "
+                    "FROM information_schema.tables "
+                    "WHERE table_catalog = current_catalog() "
+                    "AND lower(table_schema) <> 'information_schema' "
+                    "ORDER BY table_schema, table_name"
+                )
+                column_rows = await self._query(
+                    self._COLUMNS_SQL + " WHERE table_catalog = current_catalog() "
+                    "AND lower(table_schema) <> 'information_schema' "
+                    "ORDER BY table_schema, table_name, ordinal_position"
+                )
+            finally:
+                await self.disconnect()
+        except DatabricksConfigError:
+            raise
+        except Exception as exc:
+            # /connection/schema includes exception text in its response. Keep
+            # connector/SDK request details (which can contain credentials) out.
+            raise DatabricksConfigError(self._error_message(exc)) from None
 
         columns: Dict[tuple, List[Column]] = {}
         for row in column_rows:
