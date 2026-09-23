@@ -1,3 +1,5 @@
+import 'server-only'
+
 /**
  * Auth.js reports failures as a code on the query string. Turn each one into a
  * sentence that names the problem and the way out, because the raw code tells

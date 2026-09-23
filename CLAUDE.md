@@ -26,7 +26,7 @@ docker compose --profile demo up -d demo-source   # dummy CRM Postgres for tryin
 ## Key decisions
 
 **Auth.** Endpoints are discovered from `{OIDC_ISSUER}/.well-known/...`
-(`src/lib/oidc.ts`) — never hardcode a provider URL. `User.id` is a Prisma UUID,
+(`src/server/auth/oidc.ts`) — never hardcode a provider URL. `User.id` is a Prisma UUID,
 not the OIDC `sub` (which lives in `User.oidcSub`). Frontend and dbt-runner
 verify JWTs independently. `AUTH_TRUST_HOST=true` behind a proxy. Middleware
 gates pages only; API routes do their own session check so they 401 instead of
@@ -211,6 +211,6 @@ Warm worker pools are reclaimed idle-first then LRU, never mid-job.
   no adapter on purpose, refused as a warehouse with a message.
 - Accept Python source for an ingest source — configuration is declarative only.
 - Skip a host guard on any endpoint that connects to a user-supplied host:
-  `app/core/host_guard.py` in dbt-runner, `src/lib/host-guard.ts` in the
+  `app/core/host_guard.py` in dbt-runner, `src/server/host-guard.ts` in the
   frontend (a provider's Base URL is fetched by the server too).
 - Give dsh-agent database access or let it shell out to dbt.

@@ -5,7 +5,7 @@ import {
   getProjectTargets,
   updateProjectTarget,
   type ProjectTargetInput,
-} from '@/lib/actions/data'
+} from '@/features/projects/server'
 
 function errorResponse(err: unknown) {
   const msg = err instanceof Error ? err.message : 'Unknown error'

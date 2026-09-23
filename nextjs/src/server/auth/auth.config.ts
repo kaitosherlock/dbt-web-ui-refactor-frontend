@@ -1,6 +1,10 @@
+// No `server-only` guard here: middleware.ts imports this file and runs in the
+// Edge runtime, a separate (non-client, non-Node) bundle — adding the guard
+// risks breaking that build for a marginal benefit, since nothing else that
+// isn't already server-side imports this file (see docs/frontend-refactor-plan.md).
 import type { NextAuthConfig } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
-import { AUTH_DISABLED, LOCAL_USER } from '@/lib/auth-constants'
+import { AUTH_DISABLED, LOCAL_USER } from '@/server/auth/auth-constants'
 
 // Generic OIDC provider: endpoints come from the issuer's discovery document,
 // so this works with any spec-compliant IdP (Keycloak, Authentik, Zitadel,

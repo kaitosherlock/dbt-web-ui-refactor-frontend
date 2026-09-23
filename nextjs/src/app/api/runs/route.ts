@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { RunCommand } from '@prisma/client'
-import { getRuns, getAllRunsAcrossProjects, getRunLogDashboard } from '@/lib/actions/data'
+import { getRuns, getAllRunsAcrossProjects, getRunLogDashboard } from '@/features/orchestrate/server'
 
 const RUN_STATUSES = new Set(['pending', 'running', 'success', 'error', 'cancelled'])
 

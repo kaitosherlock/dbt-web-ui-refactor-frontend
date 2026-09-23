@@ -4,7 +4,7 @@ import {
   deleteIngestSource,
   getIngestSources,
   updateIngestSource,
-} from '@/lib/actions/data'
+} from '@/features/ingest/server'
 import type { IngestSourceInput } from '@/lib/ingest-source-validation'
 
 function errorResponse(err: unknown) {

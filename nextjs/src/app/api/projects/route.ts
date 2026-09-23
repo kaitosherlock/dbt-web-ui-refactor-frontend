@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getProjects, createProject, getProjectById, updateProject, softDeleteProject, hardDeleteProject } from '@/lib/actions/data'
+import { getProjects, createProject, getProjectById, updateProject, softDeleteProject, hardDeleteProject } from '@/features/projects/server'
 
 export async function GET(req: Request) {
   try {

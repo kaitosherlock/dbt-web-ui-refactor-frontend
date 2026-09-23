@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getSessionOrNull } from '@/lib/session'
+import { getSessionOrNull } from '@/server/session'
 import * as crypto from 'crypto'
 
 // Mints an HMAC-signed, time-limited download URL for a file owned by the

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getCurrentUserId } from '@/lib/session'
+import { getCurrentUserId } from '@/server/session'
 import {
   CATALOG_ROUTES,
   PROTOCOLS,

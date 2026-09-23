@@ -1,5 +1,5 @@
-import { AUTH_DISABLED } from "@/lib/auth-constants"
-import { authErrorMessage } from "@/lib/auth-errors"
+import { AUTH_DISABLED } from "@/server/auth/auth-constants"
+import { authErrorMessage } from "@/server/auth/auth-errors"
 import AuthShell from "./AuthShell"
 import AutoLogin from "./AutoLogin"
 import SsoLogin from "./SsoLogin"

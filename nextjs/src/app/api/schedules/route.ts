@@ -5,7 +5,7 @@ import {
   getSchedules,
   updateSchedule,
   type ScheduleInput,
-} from '@/lib/actions/data'
+} from '@/features/orchestrate/server'
 
 function errorResponse(err: unknown) {
   const msg = err instanceof Error ? err.message : 'Unknown error'

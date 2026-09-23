@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { auth } from '@/server/auth/auth'
 import { getDbtRunnerUrl } from '@/common/api/client'
-import { getConnectionById, getDremioSourceById } from '@/lib/actions/data'
-import { decryptSecret } from '@/lib/crypto'
+import { getConnectionById, getDremioSourceById } from '@/features/connections/server'
+import { decryptSecret } from '@/server/crypto'
 import { checkLakehouse, type LakehouseMode } from '@/lib/lakehouse'
 
 export async function POST(

@@ -1,6 +1,6 @@
-import { proxyRequest } from '@/lib/api/proxy'
+import { proxyRequest } from '@/server/proxy'
 import { resolveRoutes } from '@/lib/ai-providers'
-import { getSessionOrNull } from '@/lib/session'
+import { getSessionOrNull } from '@/server/session'
 
 /**
  * The dbt assistant. The address is internal and defaulted, like dbt-runner's:
