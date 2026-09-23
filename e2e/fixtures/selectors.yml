@@ -1,0 +1,6 @@
+selectors:
+  - name: txn_incremental
+    description: The incremental transaction model used by the parity flow.
+    definition:
+      method: tag
+      value: e2e_incremental
