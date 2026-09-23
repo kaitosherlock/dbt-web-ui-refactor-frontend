@@ -55,3 +55,25 @@ tests, then merge codex/dbt1-parity into main locally (no push).
 - Frontend (after all backend phases): AGY CLI, model gemini-3.8-flash-high, one task per feature
   area, using the "Frontend follow-ups" + endpoint shapes recorded in each phase's commit/report.
 - Claude (orchestrator) reviews every result and does the final review before merge to main.
+
+## Cleanup after merge (user decision)
+- Delete: docs/codex/baseline-failures.txt, docs/codex/dbt-core-1x-parity.md, docs/codex/HANDOVER.md,
+  nextjs/.env.test, the dbtcraft_test database, orchestrator scratch files, untracked junk (__pycache__ etc. not in git).
+- Keep: all real tests (dbt-runner/tests, nextjs/test incl. new ones).
+- Move docs/codex/adding-an-adapter.md → docs/adding-an-adapter.md.
+- Remaining frontend follow-ups go into the final commit message.
+
+## PAUSED 2026-09-23 ~17:15 (user going offline)
+- Codex run "move stack to dbt 1.11 + Databricks" was killed mid-way.
+- Commit 1072226 "back-end" (author minhkdn, not the orchestrator) contains
+  that in-progress work: dbt-core 1.11.8, dremio 1.11.0, duckdb 1.11.0,
+  oracle 1.11.1, snowflake 1.11.6, databricks 1.11.8; dbt-postgres held back
+  (1.11.0 needs dbt-adapters>=1.24.1, databricks 1.11.8 needs <1.23).
+  It also includes nextjs/src/middleware.ts (not part of this work - ask).
+  UNREVIEWED and UNTESTED.
+- Uncommitted on top: tests/test_dbt_version_smoke.py (+77), uv.lock (2 lines), this file.
+- Resume: 1) review 1072226 + working tree (versions vs c4ed2fe, no silent
+  downgrades, certifi cap under snowflake 1.11.6), 2) finish the dbt 1.11
+  compatibility checks listed in the killed prompt, 3) full suite vs
+  baseline-failures.txt, 4) commit, then continue: rest of 5b → 6 → AGY
+  frontend → token-fetch fix → merge to main → cleanup.

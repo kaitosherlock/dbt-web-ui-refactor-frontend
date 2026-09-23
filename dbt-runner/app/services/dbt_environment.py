@@ -93,6 +93,8 @@ _LEGACY_DBT_CLI_ENV_VARS = frozenset(
 FALLBACK_DBT_CLI_ENV_VARS = frozenset(
     {
         *_LEGACY_DBT_CLI_ENV_VARS,
+        # Added in dbt 1.11 without a legacy DBT_* alias.
+        "DBT_ENGINE_SQLPARSE",
         *{
             f"DBT_ENGINE_{name.removeprefix('DBT_')}"
             for name in _LEGACY_DBT_CLI_ENV_VARS

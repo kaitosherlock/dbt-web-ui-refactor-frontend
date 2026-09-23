@@ -617,6 +617,17 @@ def test_extract_schema_reads_relations_and_columns_in_two_queries():
     conn.close.assert_called_once()
 
 
+def test_extract_schema_does_not_reflect_connector_secrets():
+    adapter = DatabricksAdapter(
+        {"host": HOST, "http_path": HTTP_PATH, "token": TOKEN}
+    )
+    with patch("databricks.sql.connect", side_effect=RuntimeError(TOKEN)):
+        with pytest.raises(DatabricksConfigError) as raised:
+            asyncio.run(adapter.extract_schema())
+    assert str(raised.value) == "Databricks connection failed"
+    assert TOKEN not in str(raised.value)
+
+
 def test_introspection_binds_schema_names():
     conn, cursor = _mock_connection([("customers",)])
     adapter = DatabricksAdapter({"host": HOST, "http_path": HTTP_PATH, "token": TOKEN})
