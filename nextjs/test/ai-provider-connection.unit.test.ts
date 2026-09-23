@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { checkProviderConnection } from "@/lib/ai-provider-connection"
+import { checkProviderConnection } from "@/features/settings/server-connection"
 
 describe("AI provider connection checks", () => {
   it("checks an OpenAI-compatible models endpoint with bearer authentication", async () => {

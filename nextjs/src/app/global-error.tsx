@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { reportClientError } from '@/lib/clientLogs'
+import { reportClientError } from '@/common/lib/clientLogs'
 
 // Catches errors in the root layout itself. Must render its own <html>/<body>.
 export default function GlobalError({

@@ -35,7 +35,7 @@ redirecting.
 **Routing.** Five sidebar sections (`/`, `/develop`, `/orchestrate`, `/explore`,
 `/data`); sub-pages are tabs in the query string (`?tab=schedules`) with legacy
 redirects in `next.config.ts`. `/settings` is reached from the avatar menu only.
-A new page needs an entry in `components/layout/navigation.ts` *and* the icon
+A new page needs an entry in `common/layout/navigation.ts` *and* the icon
 map in `Sidebar.tsx`. Per-project configuration belongs in
 `ProjectSettingsDialog.tsx`, not a new dialog.
 
@@ -140,7 +140,7 @@ without a Build button because `/charts/render` draws from rows the browser
 already holds (no warehouse round trip); `chartProblem` states the renderer's
 limits up front instead of failing on them. Add chart still inserts the *query*,
 never these rows, so the dashboard refreshes. Helpers and their tests:
-`boardSource` / `boardNeedsRender` / `chartProblem` in `src/lib/board.ts`.
+`boardSource` / `boardNeedsRender` / `chartProblem` in `src/features/explore/model/board.ts`.
 
 **Scheduling.** `app/services/scheduler.py` is one poll loop doing three jobs:
 fire due schedules, prune run history, run DuckLake maintenance. Leadership is a

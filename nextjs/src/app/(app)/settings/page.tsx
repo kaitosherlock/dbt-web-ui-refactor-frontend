@@ -2,11 +2,11 @@
 
 import React, { useEffect, useState } from "react"
 import { AlertCircle, Check, Copy, Loader2, ShieldCheck } from "lucide-react"
-import { useGlobal } from "@/lib/context/GlobalContext"
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
-import PageHeader from "@/components/layout/PageHeader"
-import AssistantProvidersCard from "@/components/settings/AssistantProvidersCard"
-import { getSystemInfo, type SystemInfo } from "@/lib/api-client"
+import { useGlobal } from "@/common/layout/GlobalContext"
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/common/ui/card"
+import PageHeader from "@/common/layout/PageHeader"
+import AssistantProvidersCard from "@/features/settings/components/AssistantProvidersCard"
+import { getSystemInfo, type SystemInfo } from "@/features/settings/api"
 
 function formatSeconds(seconds: number): string {
   if (seconds >= 3600) return `${Math.round(seconds / 360) / 10} h`

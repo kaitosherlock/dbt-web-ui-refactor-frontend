@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest'
 import {
   validateIngestSource,
   type IngestSourceInput,
-} from '@/lib/ingest-source-validation'
+} from '@/features/ingest/model/ingest-source-validation'
 
 function sqlSource(overrides: Partial<IngestSourceInput> = {}): IngestSourceInput {
   return {

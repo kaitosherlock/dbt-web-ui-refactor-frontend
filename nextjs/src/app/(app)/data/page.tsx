@@ -4,12 +4,12 @@ import React, { Suspense } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Compass, DownloadCloud, Server, Waves } from "lucide-react"
-import PageHeader from "@/components/layout/PageHeader"
-import ConnectionsView from "@/components/connections/ConnectionsView"
-import SourcesView from "@/components/sources/SourcesView"
-import LakehouseView from "@/components/lakehouse/LakehouseView"
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import PageHeader from "@/common/layout/PageHeader"
+import ConnectionsView from "@/features/connections/components/ConnectionsView"
+import SourcesView from "@/features/ingest/components/SourcesView"
+import LakehouseView from "@/features/lakehouse/components/LakehouseView"
+import { Button } from "@/common/ui/button"
+import { cn } from "@/common/lib/utils"
 
 const SECTIONS = [
   { id: "sources", label: "Data loads", icon: DownloadCloud, title: "Data loads", description: "Manage saved loads from databases, APIs and files into your warehouse or lakehouse." },

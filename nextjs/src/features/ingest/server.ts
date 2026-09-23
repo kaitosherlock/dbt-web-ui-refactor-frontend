@@ -7,7 +7,7 @@ import { revalidatePath } from 'next/cache'
 import {
   type IngestSourceInput,
   validateIngestSource,
-} from '@/lib/ingest-source-validation'
+} from '@/features/ingest/model/ingest-source-validation'
 import { Prisma } from '@prisma/client'
 
 // ---------------------------------------------------------------------------

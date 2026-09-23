@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { declaredModels } from "@/lib/ai-providers"
+import { declaredModels } from "@/features/settings/server"
 
 /**
  * pi-ai refuses a model its own catalog does not list, even when the provider

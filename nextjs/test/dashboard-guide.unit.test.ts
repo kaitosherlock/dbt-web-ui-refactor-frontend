@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { BOARD_TEMPLATES, modelDashboard } from '@/lib/dashboard-guide'
-import type { DataEntry } from '@/lib/explore-data'
+import { BOARD_TEMPLATES, modelDashboard } from '@/features/explore/model/dashboard-guide'
+import type { DataEntry } from '@/features/explore/model/explore-data'
 
 const model: DataEntry = { id: 'model.sales.orders', name: 'orders', kind: 'model', path: 'models/orders.sql', expression: '{{ ref("sales", "orders") }}', columns: [{ name: 'region' }, { name: 'amount' }] }
 describe('guided dashboard template', () => {

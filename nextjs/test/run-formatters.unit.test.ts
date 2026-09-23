@@ -1,5 +1,5 @@
-import { getFullCommand } from "@/components/runs/formatters"
-import type { DbtRun } from "@/components/runs/types"
+import { getFullCommand } from "@/entities/run/model/formatters"
+import type { DbtRun } from "@/entities/run/types"
 
 const run = (overrides: Partial<DbtRun>): DbtRun =>
   ({ id: "r1", command: "run", selector: null, status: "success", ...overrides }) as DbtRun

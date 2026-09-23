@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { signIn } from "next-auth/react"
 import { ArrowRight, Loader2, ShieldCheck } from "lucide-react"
-import { PRODUCT_NAME } from "@/lib/branding"
+import { PRODUCT_NAME } from "@/common/lib/branding"
 
 export default function SsoLogin({
   providerName,

@@ -1,4 +1,4 @@
-import { isPlausibleCron } from "@/lib/cron"
+import { isPlausibleCron } from "@/features/orchestrate/model/cron"
 
 describe("isPlausibleCron", () => {
   it("accepts the expressions the schedule presets use", () => {

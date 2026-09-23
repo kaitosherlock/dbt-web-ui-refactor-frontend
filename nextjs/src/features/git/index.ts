@@ -1,0 +1,5 @@
+export { gitApi } from './api'
+export { default as GitCredentialDialog, type GitOperationType, type GitCredentialDialogProps } from './components/GitCredentialDialog'
+export { default as SourceControlPanel } from './components/SourceControlPanel'
+export { default as CommitHistory } from './components/CommitHistory'
+export { default as DiffEditor } from './components/DiffEditor'

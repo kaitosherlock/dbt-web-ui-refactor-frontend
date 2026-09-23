@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { chartNumber, chartRows, numericChartColumns, sandboxChartHtml } from "@/lib/query-chart"
+import { chartNumber, chartRows, numericChartColumns, sandboxChartHtml } from "@/features/explore/model/query-chart"
 
 describe("query chart data", () => {
   it("recognizes decimal values without converting blanks, booleans or objects to zero", () => {
