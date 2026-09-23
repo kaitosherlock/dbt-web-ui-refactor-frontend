@@ -22,6 +22,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "test:setup": "bash scripts/setup-test-db.sh",
     "test": "vitest run",
     "test:unit": "vitest run --config vitest.unit.config.ts",
@@ -44,6 +45,7 @@
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
+    "server-only": "^0.0.1",
     "sharp": "^0.35.3",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7"
