@@ -24,7 +24,7 @@ import {
   hardDeleteProject,
 } from "@/lib/api-client";
 import { filesApi, dbtApi, gitApi, envVarsApi } from "@/lib/api";
-import { getDbtRunnerUrl } from "@/lib/api/client";
+import { getDbtRunnerUrl } from '@/common/api/client';
 import { buildDbtAdditionalArgs, buildDbtCommandWithArgs } from "@/lib/dbt-command-args";
 import { clearLegacyDevelopSession, loadDevelopSession, saveDevelopSession, type DevelopSessionState } from "@/lib/develop-session";
 import {

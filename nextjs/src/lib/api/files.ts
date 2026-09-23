@@ -2,7 +2,7 @@
  * dbt-runner API: File operations
  */
 
-import { apiClient } from './client';
+import { apiClient } from '@/common/api/client';
 
 // Types
 export interface FileNode {

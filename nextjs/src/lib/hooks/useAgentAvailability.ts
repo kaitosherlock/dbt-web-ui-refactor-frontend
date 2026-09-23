@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getAgentUrl } from '@/lib/api/client'
+import { getAgentUrl } from '@/common/api/client'
 
 export interface AgentHealth {
     status?: string

@@ -4,7 +4,7 @@ import React from "react"
 import { Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { generateUUID } from "@/lib/api/client"
+import { generateUUID } from '@/common/api/client'
 import type { DbtEnvironmentVariable, DbtEnvironmentVariableType } from "./types"
 
 export const createEnvironmentVariable = (): DbtEnvironmentVariable => ({

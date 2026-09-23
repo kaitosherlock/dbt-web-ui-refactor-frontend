@@ -1,6 +1,6 @@
 "use client"
 import { useEffect, useState } from "react"
-import { apiClient } from "@/lib/api/client"
+import { apiClient } from '@/common/api/client'
 
 interface Environment { default: string | null; targets: { name: string; type?: string; database?: string; schema?: string }[]; notice?: string }
 export default function ExecutionEnvironment({ projectId, value, onChange, disabled = false }: { projectId: string; value: string; onChange: (value: string) => void; disabled?: boolean }) {

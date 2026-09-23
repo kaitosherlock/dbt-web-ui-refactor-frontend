@@ -14,7 +14,7 @@
  *   const branches = await gitApi.getBranches(projectId);
  */
 
-export { apiClient, ApiClient, getDbtRunnerUrl, type ApiResponse, type ApiError } from './client';
+export { apiClient, ApiClient, getDbtRunnerUrl, type ApiResponse, type ApiError } from '@/common/api/client';
 export { dbtApi } from './dbt';
 export { connectionApi, type ConnectionTestRequest, type ConnectionTestResponse } from './connection';
 export { filesApi } from './files';

@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { getDbtRunnerUrl } from '@/lib/api/client';
+import { getDbtRunnerUrl } from '@/common/api/client';
 
 export interface FileWatcherEvent {
     type: 'created' | 'modified' | 'deleted' | 'moved' | 'connected' | 'error' | 'ping';

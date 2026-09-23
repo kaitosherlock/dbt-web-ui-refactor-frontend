@@ -3,7 +3,7 @@
  * Fire-and-forget; never throws (a failing reporter must not mask the original error).
  */
 
-import { getDbtRunnerUrl } from '@/lib/api/client'
+import { getDbtRunnerUrl } from '@/common/api/client'
 
 interface ClientErrorReport {
     message: string

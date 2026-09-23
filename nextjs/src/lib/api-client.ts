@@ -1,10 +1,8 @@
 // apiFetch moved to @/common/api/client (docs/frontend-refactor-plan.md, Phase
-// 2) — the one HTTP client shared with dbt-runner calls. Imported (not just
-// re-exported) so the ~40 domain helpers below keep calling it unchanged, and
-// re-exported so existing `import { apiFetch } from '@/lib/api-client'` keeps
-// working too.
+// 2) — the one HTTP client shared with dbt-runner calls. The ~40 domain
+// helpers below (still living here until Phase 4 splits them into
+// entities/features) keep calling it unchanged.
 import { apiFetch } from '@/common/api/client'
-export { apiFetch }
 
 // The UI was written against Supabase's snake_case column names, but Prisma
 // returns camelCase. Map project rows back to snake_case so pages keep working.

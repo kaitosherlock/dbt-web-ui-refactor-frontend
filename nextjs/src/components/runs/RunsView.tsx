@@ -20,7 +20,7 @@ import type { DbtRun, DbtRunStreamEvent, RunLogDashboardResponse } from "@/compo
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { getDbtRunnerUrl } from "@/lib/api/client"
+import { getDbtRunnerUrl } from '@/common/api/client'
 import { cn } from "@/lib/utils"
 
 const PAGE_SIZES = [10, 25, 50, 100]

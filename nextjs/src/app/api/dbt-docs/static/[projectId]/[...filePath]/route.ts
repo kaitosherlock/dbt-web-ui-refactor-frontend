@@ -13,7 +13,7 @@ export async function GET(
   const { projectId, filePath } = await params
   const filePathStr = filePath.join('/')
 
-  const { getDbtRunnerUrl } = await import('@/lib/api/client')
+  const { getDbtRunnerUrl } = await import('@/common/api/client')
   const dbtRunnerUrl = getDbtRunnerUrl()
 
   const res = await fetch(`${dbtRunnerUrl}/dbt/docs/static/${projectId}/${filePathStr}`)
