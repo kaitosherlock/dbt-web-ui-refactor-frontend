@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { getSession } from 'next-auth/react';
-import { getDbtRunnerUrl } from '@/lib/api/client';
+import { getDbtRunnerUrl } from '@/common/api/client';
 
 interface DbtRunEvent {
     type: 'started' | 'output' | 'completed' | 'error';

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react"
 import Link from "next/link"
 import { Plus, Search, FolderGit2 } from "lucide-react"
 import { getProjects, hardDeleteProject, softDeleteProject } from "@/lib/api-client"
-import { getDbtRunnerUrl } from "@/lib/api/client"
+import { getDbtRunnerUrl } from '@/common/api/client'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import ProjectList from "@/components/develop/ProjectList"

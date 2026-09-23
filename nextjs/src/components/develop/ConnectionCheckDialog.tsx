@@ -4,7 +4,7 @@ import React, { useState } from "react"
 import { CheckCircle, XCircle, AlertCircle, Loader2, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { apiClient } from "@/lib/api/client"
+import { apiClient } from '@/common/api/client'
 
 interface CheckResult {
   all_conditions_met: boolean

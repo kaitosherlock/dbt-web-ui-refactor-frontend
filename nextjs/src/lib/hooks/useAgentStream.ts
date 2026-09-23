@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getSession } from 'next-auth/react'
-import { getAgentUrl } from '@/lib/api/client'
+import { getAgentUrl } from '@/common/api/client'
 
 /** One normalized event from dsh-agent. The harness vocabulary stays server-side. */
 export interface AgentEvent {

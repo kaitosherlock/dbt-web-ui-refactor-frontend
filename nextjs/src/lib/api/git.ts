@@ -2,7 +2,7 @@
  * dbt-runner API: Git operations
  */
 
-import { apiClient } from './client';
+import { apiClient } from '@/common/api/client';
 
 // Types
 export interface GitBranch {

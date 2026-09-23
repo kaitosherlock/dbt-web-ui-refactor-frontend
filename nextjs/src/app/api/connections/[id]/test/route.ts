@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { getDbtRunnerUrl } from '@/lib/api/client'
+import { getDbtRunnerUrl } from '@/common/api/client'
 import { getConnectionById, getDremioSourceById } from '@/lib/actions/data'
 import { decryptSecret } from '@/lib/crypto'
 import { checkLakehouse, type LakehouseMode } from '@/lib/lakehouse'

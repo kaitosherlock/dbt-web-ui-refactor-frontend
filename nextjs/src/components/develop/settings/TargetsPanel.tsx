@@ -13,7 +13,7 @@ import {
 } from "@/lib/api-client"
 import ConnectionCheckDialog from "@/components/develop/ConnectionCheckDialog"
 import { DEFAULT_DBT_TARGET } from "./types"
-import { apiClient } from "@/lib/api/client"
+import { apiClient } from '@/common/api/client'
 import type { Connection } from "@/components/develop/types"
 
 interface TargetsPanelProps {

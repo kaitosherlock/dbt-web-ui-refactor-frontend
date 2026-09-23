@@ -7,7 +7,7 @@
  * host guard, both of which live in dbt-runner. So the frontend asks dbt-runner
  * what to store and stores exactly that.
  */
-import { getDbtRunnerUrl } from '@/lib/api/client'
+import { getDbtRunnerUrl } from '@/common/api/client'
 
 export const LAKEHOUSE_TYPE = 'ducklake'
 
