@@ -38,6 +38,15 @@ const eslintConfig = [
     },
   },
   {
+    files: ["scripts/**/*.cjs"],
+    languageOptions: {
+      sourceType: "commonjs",
+    },
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
+  {
     files: ["src/common/**"],
     rules: restrict(
       ["@/features/*", "@/entities/*", "@/server/*", "@/app/*"],

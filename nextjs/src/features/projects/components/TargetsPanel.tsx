@@ -13,6 +13,7 @@ import {
   type ProjectTargetRow,
 } from "@/entities/target"
 import ConnectionCheckDialog from "./ConnectionCheckDialog"
+import TestProfileDialog from "./TestProfileDialog"
 import { DEFAULT_DBT_TARGET } from "../types"
 import { apiClient } from '@/common/api/client'
 import type { Connection } from "@/entities/connection"
@@ -382,12 +383,19 @@ export default function TargetsPanel({
         </Button>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-gray-500">
           A check opens a real connection to that target&apos;s warehouse. A lakehouse is not one -
           it is attached to a target on the Lakehouse tab.
         </p>
-        <ConnectionCheckDialog projectId={projectId} compact />
+        <div className="flex items-center gap-2 shrink-0">
+          <TestProfileDialog
+            projectId={projectId}
+            activeTarget={activeTarget}
+            availableTargets={targets.map((t) => t.name)}
+          />
+          <ConnectionCheckDialog projectId={projectId} compact />
+        </div>
       </div>
 
       {connections.length === 0 && (

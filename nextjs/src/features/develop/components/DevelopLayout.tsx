@@ -38,6 +38,8 @@ import {
   saveRunOptions,
 } from "../model/run-options";
 import { RunOptionsDialog } from "./RunOptionsDialog";
+import { ListResourcesDialog } from "./ListResourcesDialog";
+import { RunOperationDialog } from "./RunOperationDialog";
 import { clearLegacyDevelopSession, loadDevelopSession, saveDevelopSession, type DevelopSessionState } from "../model/develop-session";
 import { useDbtIntellisense } from "../hooks/useDbtIntellisense";
 import { usePanelLayout } from "../hooks/usePanelLayout";
@@ -293,6 +295,8 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
     if (settingsParam) openSettings(settingsParam as ProjectSettingsTab);
   }, [settingsParam, openSettings]);
   const [dbtArgsDialogOpen, setDbtArgsDialogOpen] = useState(false);
+  const [listResourcesOpen, setListResourcesOpen] = useState(false);
+  const [runOperationOpen, setRunOperationOpen] = useState(false);
   const [dbtCommandArgs, setDbtCommandArgs] = useState("");
   const [dbtFullRefresh, setDbtFullRefresh] = useState(false);
   const [runOptions, setRunOptions] = useState<RunOptionsState>({});
@@ -2227,6 +2231,8 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
           onToggleAssistant={agent.available ? () => setAgentOpen((open) => !open) : undefined}
           assistantOpen={agentOpen}
           onOpenRunOptions={() => setDbtArgsDialogOpen(true)}
+          onOpenListResources={() => setListResourcesOpen(true)}
+          onOpenRunOperation={() => setRunOperationOpen(true)}
           onRunBuildModified={() => void handleRunBuildModified(effectiveStateTarget)}
           onCloneState={() => void handleCloneState(effectiveStateTarget)}
           hasActiveRunOptions={hasActiveRunOptions(runOptions)}
@@ -2252,6 +2258,28 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
         onCloneFromTarget={(target, defer, favorState) =>
           void handleCloneState(target, defer, favorState)
         }
+      />
+
+      <ListResourcesDialog
+        open={listResourcesOpen}
+        onClose={() => setListResourcesOpen(false)}
+        projectId={projectId}
+        activeTarget={dbtTarget}
+        availableTargets={projectTargetNames}
+      />
+
+      <RunOperationDialog
+        open={runOperationOpen}
+        onClose={() => setRunOperationOpen(false)}
+        projectId={projectId}
+        activeTarget={dbtTarget}
+        availableTargets={projectTargetNames}
+        onOperationComplete={(output) => {
+          if (output) {
+            setTerminalOutput((prev) => [...prev, ...output.split("\n")]);
+            setTerminalOpen(true);
+          }
+        }}
       />
 
       {/* Dialogs */}

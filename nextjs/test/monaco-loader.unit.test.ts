@@ -4,7 +4,7 @@ import { createSecurityHeaders } from "../next.config"
 describe("local Monaco loader", () => {
   it("provides the installed Monaco module instead of the default CDN path", () => {
     const config = vi.fn()
-    const monaco = { editor: {} }
+    const monaco = { editor: {} } as unknown as typeof import("monaco-editor")
 
     configureMonacoLoader({ config }, monaco)
 

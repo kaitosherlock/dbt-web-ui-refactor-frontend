@@ -162,12 +162,100 @@ export interface DbtLineageResponse {
 export interface DbtInitRequest {
     project_id: string;
     project_name: string;
+    template?: string;
 }
 
 export interface DbtInitResponse {
     success: boolean;
     message: string;
     path?: string;
+}
+
+export interface DbtInitTemplatesResponse {
+    templates: string[];
+    default: string;
+}
+
+export interface DbtLsRequest {
+    project_id: string;
+    select?: string;
+    exclude?: string;
+    resource_types?: string[];
+    selector_name?: string;
+    target?: string;
+    vars?: Record<string, unknown>;
+    environment_variables?: Record<string, string>;
+}
+
+export interface DbtLsResourceRow {
+    unique_id: string;
+    name: string;
+    resource_type: string;
+    package_name?: string;
+    original_file_path?: string;
+    alias?: string;
+    source_name?: string;
+    tags?: string[];
+    depends_on?: {
+        macros?: string[];
+        nodes?: string[];
+    } | string[];
+    config?: {
+        materialized?: string;
+        enabled?: boolean;
+        schema?: string;
+        database?: string;
+    };
+}
+
+export interface DbtLsResponse {
+    success: boolean;
+    rows: DbtLsResourceRow[];
+    count: number;
+    truncated: boolean;
+    error?: string;
+}
+
+export interface DbtDebugRequest {
+    project_id: string;
+    target?: string;
+    environment_variables?: Record<string, string>;
+}
+
+export interface DbtDebugResponse {
+    success: boolean;
+    target: string;
+    output: string;
+}
+
+export interface DbtMacroSignatureArg {
+    name: string;
+    default?: unknown;
+}
+
+export interface DbtMacroItem {
+    unique_id: string;
+    name: string;
+    package_name?: string | null;
+    description?: string | null;
+    arguments?: unknown[];
+    signature?: DbtMacroSignatureArg[];
+}
+
+export interface DbtMacrosResponse {
+    success: boolean;
+    status: 'ready' | 'missing_manifest';
+    generated_at?: string | null;
+    macros: DbtMacroItem[];
+}
+
+export interface DbtRunOperationRequest {
+    project_id: string;
+    macro: string;
+    args?: Record<string, unknown>;
+    target?: string;
+    vars?: Record<string, unknown>;
+    environment_variables?: Record<string, string>;
 }
 
 export interface DbtIntellisenseColumn {
@@ -383,13 +471,50 @@ export const dbtApi = {
         }),
 
     /**
-     * Initialize a new dbt project
+     * Initialize a new dbt project (optionally with starter template)
      */
-    init: (projectId: string, projectName: string) =>
+    init: (projectId: string, projectName: string, template?: string) =>
         apiClient.post<DbtInitResponse>('/dbt/init', {
             project_id: projectId,
             project_name: projectName,
+            template,
         }),
+
+    /**
+     * List starter templates supported by POST /dbt/init
+     */
+    listInitTemplates: () =>
+        apiClient.get<DbtInitTemplatesResponse>('/dbt/init/templates'),
+
+    /**
+     * List project resources (dbt ls)
+     */
+    listResources: (request: DbtLsRequest) =>
+        apiClient.post<DbtLsResponse>('/dbt/ls', request),
+
+    /**
+     * Check project profile and warehouse connection (dbt debug)
+     */
+    debugProject: (projectId: string, target?: string, environmentVariables?: Record<string, string>) =>
+        apiClient.post<DbtDebugResponse>('/dbt/debug', {
+            project_id: projectId,
+            target,
+            environment_variables: environmentVariables,
+        }),
+
+    /**
+     * List macros available in the project's manifest
+     */
+    listMacros: (projectId: string, includeInternal: boolean = false) =>
+        apiClient.get<DbtMacrosResponse>(
+            `/dbt/macros/${encodeURIComponent(projectId)}?include_internal=${includeInternal}`,
+        ),
+
+    /**
+     * Run a macro operation (dbt run-operation)
+     */
+    runOperation: (request: DbtRunOperationRequest) =>
+        apiClient.post<DbtCommandResponse>('/dbt/run-operation', request),
 
     /**
      * Get normalized dbt metadata for editor autocomplete and definitions

@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import { Play, CheckCircle, RefreshCw, Database, Save, Terminal, BookOpen, Package, Sprout, FileText, Plug, Trash2, Clock, Bot, Layers, Copy, SlidersHorizontal } from 'lucide-react';
+import { Play, CheckCircle, RefreshCw, Database, Save, Terminal, BookOpen, Package, Sprout, FileText, Plug, Trash2, Clock, Bot, Layers, Copy, SlidersHorizontal, Wand2 } from 'lucide-react';
 import DbtIcon from '@/common/components/icons/DbtIcon';
 import type { Connection } from '@/entities/connection';
 
@@ -32,6 +32,8 @@ interface RightPanelProps {
     onOpenRunOptions?: () => void;
     onRunBuildModified?: () => void;
     onCloneState?: () => void;
+    onOpenListResources?: () => void;
+    onOpenRunOperation?: () => void;
     hasActiveRunOptions?: boolean;
     hasState?: boolean;
     stateTarget?: string;
@@ -57,6 +59,8 @@ export default function RightPanel({
     onOpenRunOptions,
     onRunBuildModified,
     onCloneState,
+    onOpenListResources,
+    onOpenRunOperation,
     hasActiveRunOptions = false,
     hasState,
     stateTarget = 'dev',
@@ -194,6 +198,24 @@ export default function RightPanel({
                                         <FileText className="h-4 w-4 text-[#0078D4]" />
                                         <span>{docsLoading ? 'Generating...' : 'Generate Docs'}</span>
                                     </button>
+                                    {onOpenListResources && (
+                                        <button
+                                            onClick={() => { onOpenListResources(); setDbtMenuOpen(false); }}
+                                            className="w-full px-3 py-2 text-sm text-left hover:bg-[#F3F2F1] flex items-center gap-2"
+                                        >
+                                            <Layers className="h-4 w-4 text-[#0078D4]" />
+                                            <span>List Resources...</span>
+                                        </button>
+                                    )}
+                                    {onOpenRunOperation && (
+                                        <button
+                                            onClick={() => { onOpenRunOperation(); setDbtMenuOpen(false); }}
+                                            className="w-full px-3 py-2 text-sm text-left hover:bg-[#F3F2F1] flex items-center gap-2"
+                                        >
+                                            <Wand2 className="h-4 w-4 text-[#8764B8]" />
+                                            <span>Run Operation...</span>
+                                        </button>
+                                    )}
 
                                     {/* State & Deferral Commands */}
                                     <div className="my-1 border-t border-[#E6E6E6]" />

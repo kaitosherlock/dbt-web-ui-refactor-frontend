@@ -10,6 +10,7 @@ import { cn } from "@/common/lib/utils"
 import EnvVarsPanel from "./EnvVarsPanel"
 import LakehousePanel from "./LakehousePanel"
 import TargetsPanel from "./TargetsPanel"
+import TestProfileDialog from "./TestProfileDialog"
 import type { DbtEnvironmentVariable, ProjectSettingsTab } from "../types"
 
 interface ProjectSummary {
@@ -194,10 +195,13 @@ export default function ProjectSettingsDialog({
                     <ReadOnlyRow label="Worktree" value={worktreeLabel} />
                     <ReadOnlyRow label="Project ID" value={project.id} />
                   </div>
-                  <p className="mt-2 text-xs text-gray-500">
-                    Git credentials are asked for the first time a push or pull needs them, and stored
-                    encrypted per project.
-                  </p>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-gray-500">
+                      Git credentials are asked for the first time a push or pull needs them, and stored
+                      encrypted per project.
+                    </p>
+                    <TestProfileDialog projectId={project.id} activeTarget={dbtTarget} />
+                  </div>
                 </section>
               </div>
             )}
