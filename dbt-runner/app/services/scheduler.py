@@ -276,6 +276,7 @@ class RunScheduler:
                 str(schedule["created_by"]),
                 session=session,
                 on_complete=on_complete,
+                persist_state=True,
             )
             await session.execute(
                 text(

@@ -62,6 +62,8 @@ DBT_PATH_FLAGS = frozenset(
     }
 )
 
+DBT_SERVER_STATE_FLAGS = frozenset({"--defer", "--favor-state"})
+
 
 def validate_dbt_argv(argv: List[str]) -> List[str]:
     """Validate client-built argv before server-owned path flags are appended."""
@@ -89,7 +91,32 @@ def validate_dbt_argv(argv: List[str]) -> List[str]:
                     f"client-provided filesystem path flag '{flag}' is not allowed; "
                     "dbt paths are managed by the server",
                 )
+        for flag in DBT_SERVER_STATE_FLAGS:
+            if token == flag or token.startswith(f"{flag}="):
+                raise DbtOperationError(
+                    "command validation",
+                    f"client-provided state flag '{flag}' is not allowed; "
+                    "use the server-managed state options",
+                )
 
+    return argv
+
+
+def append_server_state_flags(
+    argv: List[str],
+    state_dir: Optional[Path],
+    *,
+    defer: bool = False,
+    favor_state: bool = False,
+) -> List[str]:
+    """Validate client argv, then append server-derived state flags."""
+    validate_dbt_argv(argv)
+    if state_dir is not None:
+        argv.extend(["--state", str(state_dir)])
+    if defer:
+        argv.append("--defer")
+    if favor_state:
+        argv.append("--favor-state")
     return argv
 
 

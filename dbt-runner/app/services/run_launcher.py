@@ -11,15 +11,21 @@ import logging
 import shlex
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, Optional
 
 from sqlalchemy import text
 
 from app.core.db import async_session
 from app.models.dbt import DbtCommand
-from app.services.command import validate_dbt_argv
+from app.services.command import append_server_state_flags, validate_dbt_argv
 from app.services.dbt_service import DbtService
 from app.services.project import ProjectService
+from app.services.state import (
+    StateService,
+    resolve_request_state,
+    validate_target_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +72,8 @@ async def _run_in_background(
     run_id: str,
     started_at: datetime,
     on_complete: Optional[CompletionHook],
+    persist_state: bool,
+    resolved_state_path: Optional[Path],
 ) -> None:
     try:
         async with async_session() as session:
@@ -76,6 +84,8 @@ async def _run_in_background(
                 run_id=run_id,
                 started_at=started_at,
                 persist_start=False,
+                persist_state=persist_state,
+                resolved_state_path=resolved_state_path,
             )
     except Exception as exc:
         logger.exception("Background dbt run failed: %s", exc)
@@ -104,6 +114,7 @@ async def launch_dbt_run(
     *,
     session,
     on_complete: Optional[CompletionHook] = None,
+    persist_state: bool = False,
 ) -> Dict[str, Any]:
     """Insert the run row, start the run, and return its identifiers.
 
@@ -120,20 +131,42 @@ async def launch_dbt_run(
         argv.extend(request.flags)
     validate_dbt_argv(argv)
 
+    if request.target:
+        validate_target_name(request.target)
+    command_name = dbt_command_name(request.command)
+
     project_path = await ProjectService().get_or_sync(request.project_id)
+    resolved_state_path = resolve_request_state(
+        StateService(), request, command_name, project_path
+    )
+    append_server_state_flags(
+        argv,
+        resolved_state_path,
+        defer=request.defer,
+        favor_state=request.favor_state,
+    )
+
     run_id = str(uuid.uuid4())
     started_at = datetime.now(timezone.utc)
     await DbtService._insert_run_start(
         session,
         run_id,
         request.project_id,
-        dbt_command_name(request.command),
+        command_name,
         request.selector,
         started_at,
         project_path,
     )
     asyncio.create_task(
-        _run_in_background(request, user_id, run_id, started_at, on_complete)
+        _run_in_background(
+            request,
+            user_id,
+            run_id,
+            started_at,
+            on_complete,
+            persist_state,
+            resolved_state_path,
+        )
     )
     return {
         "id": run_id,

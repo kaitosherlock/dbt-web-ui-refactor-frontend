@@ -26,6 +26,7 @@ from app.core.dependencies import get_dbt_service
 from app.core.file_lock import AsyncFileLock
 from app.models.dbt import (
     CompileRequest,
+    DbtCloneRequest,
     DbtCommand,
     DbtInitRequest,
     DbtIntellisenseColumn,
@@ -34,6 +35,7 @@ from app.models.dbt import (
     DbtIntellisenseModel,
     DbtIntellisenseResponse,
     DbtIntellisenseSource,
+    DbtRetryRequest,
     ExplainRequest,
     FormatSqlRequest,
     LineageRequest,
@@ -52,6 +54,7 @@ from app.services.project import ProjectService
 from app.services.run_launcher import launch_dbt_run
 from app.services.scheduler import next_fire_time
 from app.services.sql_format import format_sql
+from app.services.state import RETRYABLE_COMMANDS, TARGET_NAME_RE, StateService
 from ingest import lakehouse
 
 logger = logging.getLogger(__name__)
@@ -292,6 +295,115 @@ async def start_dbt_run(
     user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
     await _verify_project_ownership(session, request.project_id, user_id)
     return await launch_dbt_run(request, user_id, session=session)
+
+
+@router.post("/runs/{run_id}/retry", status_code=status.HTTP_202_ACCEPTED)
+async def retry_dbt_run(
+    run_id: str,
+    request: DbtRetryRequest,
+    claims: dict = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Start `dbt retry` for an owned failed run's project.
+
+    dbt retry reads whatever target/run_results.json holds, and any later run,
+    compile or show replaces it. The run asked for must therefore be the
+    invocation those results belong to, or retry would replay a different one.
+    """
+    user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
+    row = await _load_owned_dbt_run(session, run_id, user_id)
+    if row["status"] != "error":
+        raise HTTPException(status_code=409, detail="Only a failed run can be retried")
+    project_id = str(row["project_id"])
+    project_path = await ProjectService().get_or_sync(project_id)
+    latest = StateService.load_retry_results(project_path)
+    stored = row.get("results")
+    if isinstance(stored, str):
+        try:
+            stored = json.loads(stored)
+        except ValueError:
+            stored = None
+    stored_invocation = ((stored or {}).get("metadata") or {}).get("invocation_id")
+    latest_invocation = (latest.get("metadata") or {}).get("invocation_id")
+    if not stored_invocation:
+        raise HTTPException(
+            status_code=409,
+            detail="This run left no dbt run results, so there is nothing to retry",
+        )
+    if stored_invocation != latest_invocation:
+        raise HTTPException(
+            status_code=409,
+            detail="A later dbt command replaced this run's results; "
+            "only the most recent run of the project can be retried",
+        )
+    previous_args = latest.get("args") or {}
+    if previous_args.get("which") not in RETRYABLE_COMMANDS:
+        raise HTTPException(
+            status_code=409,
+            detail=f"dbt retry cannot replay '{previous_args.get('which')}'",
+        )
+    # dbt ignores --target on retry (it reuses the failed run's); passing it
+    # only tells run_command which target's state a successful retry refreshes.
+    previous_target = previous_args.get("target")
+    command = DbtCommand(
+        project_id=project_id,
+        command="retry",
+        target=(
+            previous_target
+            if isinstance(previous_target, str) and TARGET_NAME_RE.fullmatch(previous_target)
+            else None
+        ),
+        environment_variables=request.environment_variables,
+    )
+    return await launch_dbt_run(command, user_id, session=session)
+
+
+@router.post("/runs/clone", status_code=status.HTTP_202_ACCEPTED)
+async def clone_dbt_state(
+    request: DbtCloneRequest,
+    claims: dict = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Start `dbt clone` with a server-owned state directory."""
+    user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
+    await _verify_project_ownership(session, request.project_id, user_id)
+    command = DbtCommand(
+        project_id=request.project_id,
+        command="clone",
+        selector=request.selector,
+        target=request.target,
+        state_target=request.state_target,
+        defer=request.defer,
+        favor_state=request.favor_state,
+        environment_variables=request.environment_variables,
+    )
+    return await launch_dbt_run(command, user_id, session=session)
+
+
+@router.get("/state/{project_id}")
+async def list_dbt_state(
+    project_id: str,
+    claims: dict = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """List named targets whose state artifacts are available."""
+    user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
+    await _verify_project_ownership(session, project_id, user_id)
+    return {"project_id": project_id, "targets": StateService().list_targets(project_id)}
+
+
+@router.delete("/state/{project_id}/{target}")
+async def delete_dbt_target_state(
+    project_id: str,
+    target: str,
+    claims: dict = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Remove artifacts after a named project target is deleted."""
+    user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
+    await _verify_project_ownership(session, project_id, user_id)
+    deleted = StateService().delete_target(project_id, target)
+    return {"success": True, "project_id": project_id, "target": target, "deleted": deleted}
 
 
 @router.get("/runs")

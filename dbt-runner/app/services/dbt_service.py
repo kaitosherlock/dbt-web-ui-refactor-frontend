@@ -41,13 +41,26 @@ from app.models.dbt import (
     QueryRequest,
 )
 from app.models.docs import DocsGenerateRequest, DocsServeRequest
-from app.services.command import CommandService, validate_dbt_argv
+from app.services.command import (
+    CommandService,
+    append_server_state_flags,
+    validate_dbt_argv,
+)
 from app.services.dbt_environment import (
     DBT_PROFILE_SECRET_ENV,
     sanitize_dbt_environment,
 )
 from app.services.dbt_worker import DbtWarmWorkerError, DbtWarmWorkerPool, warm_worker_pool
 from app.services.project import ProjectService
+from app.services.state import (
+    DEFAULT_STATE_TARGET,
+    STATE_PRODUCING_COMMANDS,
+    TARGET_NAME_RE,
+    StateService,
+    effective_target,
+    resolve_request_state,
+    validate_target_name,
+)
 from app.core import duckdb_resources
 from app.services.lakes import resolve_project_lake
 from ingest import lakehouse
@@ -59,9 +72,6 @@ DBT_PROFILE_SECRET_PLACEHOLDER = "{{ env_var('DBT_ENV_SECRET_DBT_CRAFT_CREDENTIA
 # The project's own connection is always this target, so a project that never
 # defines another one renders exactly the profile it did before targets existed.
 DEFAULT_TARGET_NAME = "dev"
-# Target names become profiles.yml output keys, dbt --target values and env var
-# suffixes, so the shape is checked once here rather than escaped three times.
-TARGET_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,29}$")
 
 
 def _load_adapters_module():
@@ -377,10 +387,12 @@ class DbtService:
         command_service: Optional[CommandService] = None,
         project_service: Optional[ProjectService] = None,
         worker_pool: Optional[DbtWarmWorkerPool] = None,
+        state_service: Optional[StateService] = None,
     ):
         self.command = command_service or CommandService()
         self.project = project_service or ProjectService()
         self.worker_pool = worker_pool or warm_worker_pool
+        self.state = state_service or StateService()
 
         # Track running docs servers per project: {project_id: {process, port, url}}
         self._docs_servers: Dict[str, Dict[str, Any]] = {}
@@ -972,6 +984,8 @@ class DbtService:
         run_id: Optional[str] = None,
         started_at: Optional[datetime] = None,
         persist_start: bool = True,
+        persist_state: bool = False,
+        resolved_state_path: Optional[Path] = None,
     ) -> Dict[str, Any]:
         """
         Execute a dbt command with file locking and retry logic.
@@ -999,12 +1013,7 @@ class DbtService:
 
         if request.target:
             # Reaches the dbt CLI, so the shape is checked rather than quoted.
-            if not TARGET_NAME_RE.match(request.target):
-                raise DbtOperationError(
-                    "dbt command",
-                    f"invalid target name '{request.target}' - lowercase letters, "
-                    "digits and underscores only",
-                )
+            validate_target_name(request.target)
             cmd.extend(["--target", request.target])
 
         if request.flags:
@@ -1013,6 +1022,15 @@ class DbtService:
         validate_dbt_argv(cmd)
 
         project_path = self.project.get_path_or_raise(request.project_id)
+        resolved_state_path = resolve_request_state(
+            self.state, request, command_name, project_path, resolved_state_path
+        )
+        append_server_state_flags(
+            cmd,
+            resolved_state_path,
+            defer=request.defer,
+            favor_state=request.favor_state,
+        )
         logger.info(
             "[DBT-PERF] command project_path project_id=%s elapsed_ms=%s",
             request.project_id,
@@ -1040,6 +1058,12 @@ class DbtService:
         command_str = " ".join(cmd)
         run_results_path = project_path / "target" / "run_results.json"
         run_results_mtime_before = self._get_file_mtime(run_results_path)
+        # A full command string may carry its own --target, so the request
+        # field alone does not say which target's state this run produces.
+        state_target = effective_target(cmd)
+        save_state = command_name in STATE_PRODUCING_COMMANDS and (
+            persist_state or state_target != DEFAULT_STATE_TARGET
+        )
 
         # Save run start to DB (skipped when caller already inserted the row,
         # e.g. the async /dbt/runs endpoint).
@@ -1104,6 +1128,38 @@ class DbtService:
                                 await asyncio.sleep(retry_delay)
                                 continue
                         break
+
+                    # Snapshot while the project lock is still held. Otherwise
+                    # the next run can replace target/ between process exit and
+                    # this copy, assigning its artifacts to the wrong run.
+                    # A run_results.json this invocation did not rewrite
+                    # belongs to an earlier run, and so may its manifest.
+                    if (
+                        save_state
+                        and returncode == 0
+                        and self._get_file_mtime(run_results_path)
+                        != run_results_mtime_before
+                    ):
+                        try:
+                            saved = await asyncio.to_thread(
+                                self.state.save,
+                                request.project_id,
+                                state_target,
+                                project_path,
+                            )
+                            if not saved:
+                                logger.warning(
+                                    "Successful dbt command for %s/%s produced no manifest to save",
+                                    request.project_id,
+                                    state_target,
+                                )
+                        except Exception as exc:
+                            logger.warning(
+                                "Could not save dbt state for %s/%s: %s",
+                                request.project_id,
+                                state_target,
+                                exc,
+                            )
         except asyncio.CancelledError:
             # User cancelled - ensure lock is released
             await AsyncFileLock.force_release(request.project_id, "dbt_run")
