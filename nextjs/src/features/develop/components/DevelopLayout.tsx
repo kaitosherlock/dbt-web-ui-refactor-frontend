@@ -27,7 +27,7 @@ import { filesApi, useFileWatcher, type FileWatcherEvent } from "@/entities/file
 import { useDbtRunStream } from "@/entities/run";
 import type { Connection } from "@/entities/connection";
 import { dbtApi } from "../api";
-import { getDbtRunnerUrl } from '@/common/api/client';
+import { apiClient } from '@/common/api/client';
 import { buildDbtAdditionalArgs, buildDbtCommandWithArgs } from "../model/dbt-command-args";
 import { clearLegacyDevelopSession, loadDevelopSession, saveDevelopSession, type DevelopSessionState } from "../model/develop-session";
 import { useDbtIntellisense } from "../hooks/useDbtIntellisense";
@@ -39,6 +39,7 @@ import { useFileTreeState } from "../hooks/useFileTreeState";
 import { gitApi, SourceControlPanel, CommitHistory, GitCredentialDialog } from "@/features/git";
 import {
   envVarsApi,
+  validateEnvVarName,
   DeleteProjectDialog,
   HardDeleteProjectDialog,
   RestoreProjectDialog,
@@ -686,17 +687,23 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
     setEnvVarsSaving(true);
     setEnvVarsError(null);
     try {
-      const saved = await envVarsApi.replace(
-        projectId,
-        environmentVariables
-          .map((item) => ({
-            name: item.name.trim(),
-            type: item.type,
-            value: item.value || undefined,
-            keepExisting: !item.value && item.hasValue === true,
-          }))
-          .filter((item) => item.name)
-      );
+      const itemsToSave = environmentVariables
+        .map((item) => ({
+          name: item.name.trim(),
+          type: item.type,
+          value: item.value || undefined,
+          keepExisting: !item.value && item.hasValue === true,
+        }))
+        .filter((item) => item.name);
+
+      for (const item of itemsToSave) {
+        const validation = validateEnvVarName(item.name);
+        if (!validation.valid) {
+          throw new Error(validation.error);
+        }
+      }
+
+      const saved = await envVarsApi.replace(projectId, itemsToSave);
       setEnvironmentVariables(saved.map((item) => ({
         id: item.id,
         name: item.name,
@@ -962,9 +969,8 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
   // ---- dbt commands ----
   const cancelCommand = async () => {
     try {
-      const response = await fetch(`${getDbtRunnerUrl()}/process/cancel?project_id=${projectId}`, { method: "POST" });
-      const data = await response.json();
-      if (data.success) setTerminalOutput((prev) => [...prev, "^C", "⚠️ Command cancelled"]);
+      const data = await apiClient.post<{ success?: boolean }>(`/process/cancel?project_id=${projectId}`);
+      if (data?.success) setTerminalOutput((prev) => [...prev, "^C", "⚠️ Command cancelled"]);
       setIsCommandRunning(false);
     } catch (err) {
       console.error("Failed to cancel command:", err);
@@ -1478,16 +1484,13 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
     setIsRefreshing(true);
     try {
       setTerminalOutput((prev) => [...prev, "🔄 Syncing from storage..."]);
-      const response = await fetch(`${getDbtRunnerUrl()}/project/sync/${projectId}`, { method: "POST" });
-      if (response.ok) {
-        const result = await response.json();
-        if (result.synced) {
-          setTerminalOutput((prev) => [...prev, "✅ Synced"]);
-          await loadFileTree();
-          if (activeTabPath) {
-            const tab = openTabs.find((t) => t.path === activeTabPath);
-            if (tab && !tab.isDirty) await handleFileSelect(activeTabPath);
-          }
+      const result = await apiClient.post<{ synced?: boolean }>(`/project/sync/${projectId}`);
+      if (result?.synced) {
+        setTerminalOutput((prev) => [...prev, "✅ Synced"]);
+        await loadFileTree();
+        if (activeTabPath) {
+          const tab = openTabs.find((t) => t.path === activeTabPath);
+          if (tab && !tab.isDirty) await handleFileSelect(activeTabPath);
         }
       }
     } catch {
@@ -1778,7 +1781,7 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
     if (!project) return;
     try {
       setOperationLoading(true);
-      await fetch(`${getDbtRunnerUrl()}/project/delete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project_id: project.id, hard_delete: false }) });
+      await apiClient.post("/project/delete", { project_id: project.id, hard_delete: false });
       await softDeleteProject(project.id);
       setDeleteDialogOpen(false);
       router.push("/develop");
@@ -1790,7 +1793,7 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
     if (!project) return;
     try {
       setOperationLoading(true);
-      await fetch(`${getDbtRunnerUrl()}/project/delete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project_id: project.id, hard_delete: true }) });
+      await apiClient.post("/project/delete", { project_id: project.id, hard_delete: true });
       await hardDeleteProject(project.id);
       setHardDeleteDialogOpen(false);
       router.push("/develop");

@@ -13,8 +13,15 @@ export async function GET(
 
   const { getDbtRunnerUrl } = await import('@/common/api/client')
   const dbtRunnerUrl = getDbtRunnerUrl()
+  const accessToken = (session as { accessToken?: string })?.accessToken
+  const fetchHeaders: Record<string, string> = {}
+  if (accessToken) {
+    fetchHeaders['Authorization'] = `Bearer ${accessToken}`
+  }
 
-  const res = await fetch(`${dbtRunnerUrl}/dbt/docs/view/${projectId}`)
+  const res = await fetch(`${dbtRunnerUrl}/dbt/docs/view/${projectId}`, {
+    headers: fetchHeaders,
+  })
   if (!res.ok) {
     return new Response(res.statusText, { status: res.status })
   }

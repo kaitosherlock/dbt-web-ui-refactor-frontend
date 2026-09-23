@@ -51,6 +51,7 @@ export async function deleteDremioSource(id: string) {
 type ConnectionTypeName =
   | 'postgresql' | 'duckdb' | 'dremio' | 'oracle' | 'spark' | 'ducklake'
   | 'mysql' | 'rest'
+  | 'snowflake' | 'databricks'
 
 export async function getConnections() {
   const userId = await getCurrentUserId()
@@ -76,8 +77,23 @@ export async function createConnection(data: {
   extraConfig?: Prisma.InputJsonValue
 }) {
   const userId = await getCurrentUserId()
+  let extraConfig = data.extraConfig as Record<string, unknown> | undefined
+  if (extraConfig && typeof extraConfig === 'object') {
+    extraConfig = { ...extraConfig }
+    if (
+      typeof extraConfig.secondary_secret_encrypted === 'string' &&
+      extraConfig.secondary_secret_encrypted.length > 0
+    ) {
+      extraConfig.secondary_secret_encrypted = encryptSecret(
+        extraConfig.secondary_secret_encrypted,
+      )
+    } else {
+      delete extraConfig.secondary_secret_encrypted
+    }
+  }
   const createData = {
     ...data,
+    extraConfig: extraConfig as Prisma.InputJsonValue | undefined,
     passwordEncrypted: data.passwordEncrypted
       ? encryptSecret(data.passwordEncrypted)
       : undefined,
@@ -121,6 +137,37 @@ export async function updateConnection(
 ) {
   const userId = await getCurrentUserId()
   await ensureOwnership('connection', id, userId)
+  const existing = await db.connection.findUnique({ where: { id } })
+  const existingExtra = (existing?.extraConfig as Record<string, unknown> | null) ?? {}
+
+  let extraConfig = data.extraConfig as Record<string, unknown> | undefined
+  if (extraConfig && typeof extraConfig === 'object') {
+    extraConfig = { ...extraConfig }
+    if (
+      typeof extraConfig.secondary_secret_encrypted === 'string' &&
+      extraConfig.secondary_secret_encrypted.length > 0
+    ) {
+      extraConfig.secondary_secret_encrypted = encryptSecret(
+        extraConfig.secondary_secret_encrypted,
+      )
+    } else if (extraConfig.secondary_secret_encrypted === null) {
+      delete extraConfig.secondary_secret_encrypted
+    } else if (existingExtra.secondary_secret_encrypted) {
+      const connType = data.connectionType || existing?.connectionType
+      const isSnowflakeKeypair =
+        connType === 'snowflake' && extraConfig.auth_type === 'keypair'
+      const isDatabricksOAuth =
+        connType === 'databricks' && extraConfig.auth_type === 'oauth_m2m'
+      if (isSnowflakeKeypair || isDatabricksOAuth) {
+        extraConfig.secondary_secret_encrypted = existingExtra.secondary_secret_encrypted
+      } else {
+        delete extraConfig.secondary_secret_encrypted
+      }
+    } else {
+      delete extraConfig.secondary_secret_encrypted
+    }
+  }
+
   const update: Record<string, unknown> = {
     name: data.name,
     connectionType: data.connectionType,
@@ -129,7 +176,7 @@ export async function updateConnection(
     database: data.database,
     username: data.username,
     sslMode: data.sslMode ?? null,
-    extraConfig: data.extraConfig ?? undefined,
+    extraConfig: extraConfig as Prisma.InputJsonValue | undefined,
   }
   if (!data.connectionType) delete update.connectionType
   if (data.passwordEncrypted) update.passwordEncrypted = encryptSecret(data.passwordEncrypted)

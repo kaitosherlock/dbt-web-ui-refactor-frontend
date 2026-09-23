@@ -4,6 +4,7 @@ import { getDbtRunnerUrl } from '@/common/api/client'
 import { getConnectionById, getDremioSourceById } from '@/features/connections/server'
 import { decryptSecret } from '@/server/crypto'
 import { checkLakehouse, type LakehouseMode } from '@/features/lakehouse/model/lakehouse'
+import { buildConnectionTestPayload } from '@/features/connections/model/test-payload'
 
 export async function POST(
   request: Request,
@@ -79,75 +80,13 @@ export async function POST(
       )
       return NextResponse.json(result)
     }
-    if (c.connectionType === 'dremio') {
-      const extraConfig = ((c.extraConfig as Record<string, unknown> | null) ?? {})
-      const authType = extraConfig.auth_type === 'password' ? 'password' : 'pat'
-      const credential = decryptSecret(c.passwordEncrypted)
-      const authConfig =
-        authType === 'password' ? { password: credential } : { pat: credential }
-      payload = {
-        type: 'dremio',
-        name: c.name,
-        config: {
-          host: c.host,
-          port: c.port,
-          user: c.username,
-          dremio_space: c.database || `@${c.username}`,
-          ...authConfig,
-          ...extraConfig,
-        },
-      }
-    } else if (c.connectionType === 'duckdb') {
-      payload = {
-        type: 'duckdb',
-        name: c.name,
-        config: { path: c.database },
-      }
-    } else if (c.connectionType === 'oracle') {
-      const extraConfig = ((c.extraConfig as Record<string, unknown> | null) ?? {})
-      const schema = (extraConfig.schema as string) || c.username.toUpperCase()
-      payload = {
-        type: 'oracle',
-        name: c.name,
-        config: {
-          host: c.host,
-          port: c.port,
-          user: c.username,
-          password: decryptSecret(c.passwordEncrypted),
-          service: c.database,
-          schema,
-        },
-      }
-    } else if (c.connectionType === 'spark') {
-      const extraConfig = ((c.extraConfig as Record<string, unknown> | null) ?? {})
-      const secretType = extraConfig.secret_type === 'password' || extraConfig.secret_type === 'token'
-        ? extraConfig.secret_type
-        : 'none'
-      const credential = secretType === 'none' ? '' : decryptSecret(c.passwordEncrypted)
-      payload = {
-        type: 'spark',
-        name: c.name,
-        config: {
-          host: c.host,
-          port: c.port,
-          schema: c.database,
-          user: c.username,
-          ...extraConfig,
-          ...(secretType === 'password' ? { password: credential } : {}),
-          ...(secretType === 'token' ? { token: credential } : {}),
-        },
-      }
-    } else {
-      const baseConfig: Record<string, unknown> = {
-        host: c.host,
-        port: c.port,
-        user: c.username,
-        password: decryptSecret(c.passwordEncrypted),
-        dbname: c.database,
-        schema: 'public',
-      }
-      payload = { type: 'postgresql', name: c.name, config: baseConfig }
-    }
+
+    const extra = (c.extraConfig as Record<string, unknown> | null) ?? {}
+    const password = c.passwordEncrypted ? decryptSecret(c.passwordEncrypted) : ''
+    const secondaryEncrypted = extra.secondary_secret_encrypted as string | undefined
+    const secondarySecret = secondaryEncrypted ? decryptSecret(secondaryEncrypted) : ''
+
+    payload = buildConnectionTestPayload(c, { password, secondarySecret })
   }
 
   const accessToken = (session as { accessToken?: string }).accessToken

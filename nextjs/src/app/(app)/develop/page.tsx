@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react"
 import Link from "next/link"
 import { Plus, Search, FolderGit2 } from "lucide-react"
 import { getProjects, hardDeleteProject, softDeleteProject } from "@/entities/project"
-import { getDbtRunnerUrl } from '@/common/api/client'
+import { apiClient } from '@/common/api/client'
 import { Button } from "@/common/ui/button"
 import { Input } from "@/common/ui/input"
 import ProjectList from "@/features/projects/components/ProjectList"
@@ -45,16 +45,7 @@ export default function DevelopPage() {
   }, [])
 
   const deleteProjectFiles = async (projectId: string, hardDelete: boolean) => {
-    const response = await fetch(`${getDbtRunnerUrl()}/project/delete`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ project_id: projectId, hard_delete: hardDelete }),
-    })
-
-    if (!response.ok) {
-      const data = await response.json().catch(() => null)
-      throw new Error(data?.detail || "Failed to delete project files")
-    }
+    await apiClient.post("/project/delete", { project_id: projectId, hard_delete: hardDelete })
   }
 
   const handleSoftDelete = async () => {

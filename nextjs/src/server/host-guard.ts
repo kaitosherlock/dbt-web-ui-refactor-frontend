@@ -82,6 +82,25 @@ async function resolveAll(host: string): Promise<string[]> {
   }
 }
 
+export async function assertHostAllowed(host: string, label = "Host"): Promise<void> {
+  const cleanHost = host.trim().toLowerCase().replace(/^\[|\]$/g, "")
+  if (!cleanHost) {
+    throw new HostNotAllowed(`${label} cannot be empty`)
+  }
+
+  for (const address of await resolveAll(cleanHost)) {
+    const refusal = refusalFor(address)
+    if (!refusal) continue
+    const isPrivate = refusal.includes("private")
+    if (isPrivate && privateHostsAllowed()) continue
+    throw new HostNotAllowed(
+      isPrivate
+        ? `${label} “${cleanHost}” is not allowed: ${refusal}. Set AI_PROVIDER_ALLOW_PRIVATE_HOSTS=true to reach a gateway on this network.`
+        : `${label} “${cleanHost}” is not allowed: ${refusal}.`,
+    )
+  }
+}
+
 export async function assertUrlHostAllowed(url: string): Promise<void> {
   let parsed: URL
   try {
@@ -94,16 +113,6 @@ export async function assertUrlHostAllowed(url: string): Promise<void> {
   }
   // new URL keeps the brackets of an IPv6 literal; the address is what resolves.
   const host = parsed.hostname.replace(/^\[|\]$/g, "")
-
-  for (const address of await resolveAll(host)) {
-    const refusal = refusalFor(address)
-    if (!refusal) continue
-    const isPrivate = refusal.includes("private")
-    if (isPrivate && privateHostsAllowed()) continue
-    throw new HostNotAllowed(
-      isPrivate
-        ? `Base URL “${host}” is not allowed: ${refusal}. Set AI_PROVIDER_ALLOW_PRIVATE_HOSTS=true to reach a gateway on this network.`
-        : `Base URL “${host}” is not allowed: ${refusal}.`,
-    )
-  }
+  await assertHostAllowed(host, "Base URL")
 }
+
