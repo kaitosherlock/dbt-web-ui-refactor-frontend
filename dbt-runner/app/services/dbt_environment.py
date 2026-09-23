@@ -14,7 +14,14 @@ logger = logging.getLogger(__name__)
 ALLOWED_ENV_VAR_NAME_CHARS = set(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_"
 )
-DBT_PROFILE_SECRET_ENV = "DBT_ENV_SECRET_DBT_CRAFT_CREDENTIAL"
+# Every profile secret this server renders lives under one prefix, and the
+# whole prefix is reserved: a connection's main credential, its second secret
+# (a Snowflake key's passphrase) and any secret a later adapter adds, each with
+# a `__<TARGET>` suffix per extra target. A client that could set one of these
+# names would replace another warehouse's credential in the run.
+DBT_PROFILE_SECRET_PREFIX = "DBT_ENV_SECRET_DBT_CRAFT_"
+DBT_PROFILE_SECRET_ENV = f"{DBT_PROFILE_SECRET_PREFIX}CREDENTIAL"
+DBT_PROFILE_SECONDARY_SECRET_ENV = f"{DBT_PROFILE_SECRET_PREFIX}SECONDARY"
 DBT_LAKE_CATALOG_PASSWORD_ENV = "DBT_ENV_SECRET_LAKE_CATALOG_PASSWORD"
 
 # Keep a complete baseline in case dbt changes its import layout or a partially
@@ -131,11 +138,7 @@ DBT_CLI_ENV_VARS = frozenset(
 
 
 def _is_server_owned_name(name: str) -> bool:
-    return (
-        name == DBT_PROFILE_SECRET_ENV
-        or name.startswith(f"{DBT_PROFILE_SECRET_ENV}__")
-        or name == DBT_LAKE_CATALOG_PASSWORD_ENV
-    )
+    return name.startswith(DBT_PROFILE_SECRET_PREFIX) or name == DBT_LAKE_CATALOG_PASSWORD_ENV
 
 
 def forbidden_dbt_environment_reason(

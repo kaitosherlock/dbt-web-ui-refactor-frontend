@@ -43,3 +43,15 @@ so these plain-fetch callers send no token and will 401 under OIDC
 - nextjs/src/components/develop/DevelopLayout.tsx:958 (/process/cancel), :1474 (/project/sync), :1774, :1786 (/project/delete)
 - nextjs/src/app/api/dbt-docs/view/[projectId]/route.ts and .../static/[projectId]/[...filePath]/route.ts: forward session.accessToken
 Open, needs design: /sse/files/{project_id} has no auth (EventSource cannot send headers).
+
+## Finish plan (user decision 2026-09-23)
+Queue: 5a Snowflake → Databricks (user priority) → rest of 5b → 6.
+Then: fix ONLY the plain-fetch token calls listed in MERGE BLOCKER (minimal
+frontend exception approved by the user; no other UI change), run frontend
+tests, then merge codex/dbt1-parity into main locally (no push).
+
+## Worker assignment (user decision 2026-09-23 16:10)
+- Backend tasks: Codex CLI again (quota back at 16:10). Opus subagent only as fallback when Codex is out of quota.
+- Frontend (after all backend phases): AGY CLI, model gemini-3.8-flash-high, one task per feature
+  area, using the "Frontend follow-ups" + endpoint shapes recorded in each phase's commit/report.
+- Claude (orchestrator) reviews every result and does the final review before merge to main.

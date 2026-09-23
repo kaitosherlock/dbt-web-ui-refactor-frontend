@@ -13,6 +13,7 @@ from app.exceptions import DbtOperationError
 from app.services.command import CommandService
 from app.services.dbt_environment import (
     DBT_CLI_ENV_VARS,
+    DBT_PROFILE_SECONDARY_SECRET_ENV,
     DBT_PROFILE_SECRET_ENV,
     FALLBACK_DBT_CLI_ENV_VARS,
     sanitize_dbt_environment,
@@ -65,6 +66,11 @@ class DbtEnvironmentPolicyTests(unittest.IsolatedAsyncioTestCase):
             "uv": "UV_TOOL_BIN_DIR",
             "profile credential": DBT_PROFILE_SECRET_ENV,
             "target credential": f"{DBT_PROFILE_SECRET_ENV}__PROD",
+            # The second secret (a Snowflake key's passphrase) and any secret a
+            # later adapter adds share the reserved prefix.
+            "secondary secret": DBT_PROFILE_SECONDARY_SECRET_ENV,
+            "target secondary secret": f"{DBT_PROFILE_SECONDARY_SECRET_ENV}__PROD",
+            "future profile secret": "DBT_ENV_SECRET_DBT_CRAFT_KEYFILE",
             "lake credential": "DBT_ENV_SECRET_LAKE_CATALOG_PASSWORD",
         }
         for name_class, name in names.items():

@@ -139,9 +139,11 @@ def test_target_schema_comes_from_extra_config():
 
 
 def test_unsupported_connection_type_is_rejected():
-    with pytest.raises(ValueError, match="snowflake"):
+    # Not a real warehouse name: this used to be "snowflake", until Snowflake
+    # became a supported type, and every later adapter would do the same.
+    with pytest.raises(ValueError, match="not_a_warehouse"):
         build_adapter_config_from_connection_row(
-            {"connection_type": "snowflake", "extra_config": {}}
+            {"connection_type": "not_a_warehouse", "extra_config": {}}
         )
 
 
