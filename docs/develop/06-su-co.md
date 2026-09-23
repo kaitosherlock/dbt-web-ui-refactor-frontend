@@ -114,9 +114,9 @@ Nếu gặp, đó là khoá cũ chưa được `clearLegacyBrowserStorage()` d�
 
 | Vấn đề | File |
 |---|---|
-| State và mọi handler của IDE | `nextjs/src/components-v2/develop/DevelopLayout.tsx` |
-| Ghép câu lệnh dbt | `nextjs/src/lib/dbt-command-args.ts` |
-| Stream log | `nextjs/src/lib/hooks/useDbtRunStream.ts`, `dbt-runner/app/routers/sse.py` |
+| State và mọi handler của IDE | `nextjs/src/features/develop/components/DevelopLayout.tsx` |
+| Ghép câu lệnh dbt | `nextjs/src/features/develop/model/dbt-command-args.ts` |
+| Stream log | `nextjs/src/entities/run/hooks/useDbtRunStream.ts`, `dbt-runner/app/routers/sse.py` |
 | Chạy dbt, profile, compile/preview/explain | `dbt-runner/app/services/dbt_service.py` |
 | Khoá & warm worker | `app/core/file_lock.py`, `app/core/global_semaphore.py`, `app/services/dbt_worker.py` |
 | An toàn đường dẫn file | `dbt-runner/app/services/{file_service,project}.py` |

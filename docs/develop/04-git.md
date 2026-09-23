@@ -1,7 +1,7 @@
 # 04 — Git trong Develop
 
-> Tham chiếu: `nextjs/src/components-v2/develop/workspace/{SourceControlPanel,CommitHistory}.tsx`,
-> `develop/git/GitCredentialDialog.tsx`, `dbt-runner/app/routers/git.py`,
+> Tham chiếu: `nextjs/src/features/git/components/{SourceControlPanel,CommitHistory}.tsx`,
+> `features/git/components/GitCredentialDialog.tsx`, `dbt-runner/app/routers/git.py`,
 > `dbt-runner/app/services/git_service.py`.
 
 ## 1. Sidebar tab `git` — Source Control
