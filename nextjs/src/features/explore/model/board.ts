@@ -77,7 +77,7 @@ export const emptyChartDraft = (): ChartDraft => ({ type: 'bar', fields: {}, ser
 /** First non-numeric column reads as the dimension, first numeric one as the measure. */
 export function suggestChart(columns: string[], numeric: string[], draft: ChartDraft): ChartDraft {
   const dimension = columns.find(column => !numeric.includes(column)) ?? columns[0] ?? ''
-  const measure = numeric[0] ?? columns[0] ?? ''
+  const measure = numeric.find(column => column !== dimension) ?? numeric[0] ?? columns[0] ?? ''
   return { ...draft, fields: { x: dimension, y: measure, color: measure } }
 }
 

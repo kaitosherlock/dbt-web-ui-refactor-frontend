@@ -400,7 +400,7 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
             </span>
             <span className="min-w-0">
               <span className="flex min-w-0 items-center gap-2">
-                <span className="truncate text-sm font-semibold leading-5 text-[#242424] sm:text-base">{project.name}</span>
+                <span title={project.name} className="line-clamp-2 break-words text-sm font-semibold leading-5 text-[#242424] sm:text-base">{project.name}</span>
                 <span
                   className={`hidden shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium sm:inline-flex ${
                     project.deleted_at
@@ -429,7 +429,7 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
                   <Database className="h-4 w-4 text-[#038387]" />
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-gray-950">{project.name}</p>
+                  <p title={project.name} className="line-clamp-2 break-words text-sm font-semibold text-gray-950">{project.name}</p>
                   <p className="mt-0.5 line-clamp-2 text-xs font-normal text-gray-500">
                     {project.description || "No description"}
                   </p>

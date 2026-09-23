@@ -62,3 +62,12 @@ export function getFullCommand(run: DbtRun): string {
   const command = getCommandName(run.command)
   return `dbt ${command}${run.selector ? ` --select ${run.selector}` : ""}`
 }
+
+/**
+ * Format target for display in run details. Runs executed without an explicit
+ * --target flag ran on the default target, which is always 'dev'.
+ */
+export function formatRunTarget(target: string | null | undefined): string {
+  if (!target || !target.trim()) return "dev"
+  return target.trim()
+}

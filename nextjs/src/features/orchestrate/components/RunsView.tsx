@@ -346,7 +346,7 @@ export default function RunsView({ navigation }: { navigation?: React.ReactNode 
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1040px]">
                 <thead className="border-b border-slate-200 bg-slate-50/80 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                  <tr><th className="w-10 px-3 py-2" /><th className="px-3 py-2">Project</th><th className="px-3 py-2">Command</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Node results</th><th className="px-3 py-2">Duration</th><th className="px-3 py-2">Started</th></tr>
+                  <tr><th className="w-10 px-3 py-2" /><th className="min-w-56 px-3 py-2">Project</th><th className="px-3 py-2">Command</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Node results</th><th className="px-3 py-2">Duration</th><th className="px-3 py-2">Started</th></tr>
                 </thead>
                 <tbody>
                   {dashboard.items.map((run) => {
@@ -357,7 +357,12 @@ export default function RunsView({ navigation }: { navigation?: React.ReactNode 
                           <button type="button" onClick={() => selectRun(run.id)} aria-label={`Inspect run ${run.id}`} aria-pressed={selected} className={cn("grid h-8 w-8 place-items-center rounded-lg text-slate-400 hover:bg-white hover:text-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500/30", selected && "bg-white text-sky-700 shadow-sm")}><ChevronRight className={cn("h-4 w-4 transition-transform", selected && "rotate-90")} /></button>
                         </td>
                         <td className="px-3 py-2">
-                          <p className="max-w-48 truncate text-sm font-semibold text-slate-900">{run.project?.name || "Unknown project"}</p>
+                          <p
+                            title={run.project?.name || "Unknown project"}
+                            className="max-w-64 line-clamp-2 break-words text-sm font-semibold text-slate-900"
+                          >
+                            {run.project?.name || "Unknown project"}
+                          </p>
                           <p className="mt-0.5 font-mono text-xs text-slate-400">{shortHash(run.gitCommit)} · {run.id.slice(0, 8)}</p>
                         </td>
                         <td className="px-3 py-2">

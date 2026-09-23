@@ -3,6 +3,7 @@ import {
   getFullCommand,
   getCommandName,
   formatCommandLabel,
+  formatRunTarget,
   COMMAND_LABELS,
 } from "@/entities/run/model/formatters"
 import type { DbtRun } from "@/entities/run/types"
@@ -58,3 +59,19 @@ describe("COMMAND_LABELS & formatCommandLabel", () => {
     expect(getCommandName("run")).toBe("run")
   })
 })
+
+describe("formatRunTarget", () => {
+  it("defaults to dev when target is null, undefined, or empty", () => {
+    expect(formatRunTarget(null)).toBe("dev")
+    expect(formatRunTarget(undefined)).toBe("dev")
+    expect(formatRunTarget("")).toBe("dev")
+    expect(formatRunTarget("   ")).toBe("dev")
+  })
+
+  it("returns the target name when provided", () => {
+    expect(formatRunTarget("prod")).toBe("prod")
+    expect(formatRunTarget("staging")).toBe("staging")
+    expect(formatRunTarget("ci")).toBe("ci")
+  })
+})
+

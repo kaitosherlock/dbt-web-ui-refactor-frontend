@@ -11,6 +11,9 @@ import {
   snowflakeAccountHost,
   normalizeDatabricksHost,
   normalizeDatabricksHttpPath,
+  normalizeWarehouseSchema,
+  getSecretFieldState,
+  ConnectionValidationError,
 } from "../model/validation"
 
 type ConnectionType =
@@ -414,6 +417,26 @@ export default function ConnectionDialog({ onSaved, onClose, existing, trigger }
     }
   }
 
+  const storedSnowflakeAuthType = existing?.connectionType === "snowflake"
+    ? ((existing.extraConfig as Record<string, unknown> | undefined)?.auth_type as string | undefined) ?? "password"
+    : null
+
+  const storedDatabricksAuthType = existing?.connectionType === "databricks"
+    ? ((existing.extraConfig as Record<string, unknown> | undefined)?.auth_type as string | undefined) ?? "pat"
+    : null
+
+  const sfSecretState = getSecretFieldState({
+    isEdit,
+    storedAuthType: storedSnowflakeAuthType,
+    selectedAuthType: snowflake.auth_type,
+  })
+
+  const dbSecretState = getSecretFieldState({
+    isEdit,
+    storedAuthType: storedDatabricksAuthType,
+    selectedAuthType: databricks.auth_type,
+  })
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
@@ -609,13 +632,21 @@ export default function ConnectionDialog({ onSaved, onClose, existing, trigger }
       } else if (type === "snowflake") {
         const cleanAccount = normalizeSnowflakeAccount(snowflake.account)
         const host = snowflakeAccountHost(cleanAccount)
+        const cleanSchema = normalizeWarehouseSchema(form.schema, "Snowflake")
         const extraConfig: Record<string, unknown> = {
           account: cleanAccount,
           auth_type: snowflake.auth_type,
+          schema: cleanSchema,
         }
         if (snowflake.role.trim()) extraConfig.role = snowflake.role.trim()
         if (snowflake.warehouse.trim()) extraConfig.warehouse = snowflake.warehouse.trim()
-        if (form.schema.trim()) extraConfig.schema = form.schema.trim()
+        if (sfSecretState.isRequired && !form.credential.trim()) {
+          throw new ConnectionValidationError(
+            snowflake.auth_type === "keypair"
+              ? "Private key PEM is required for Snowflake key-pair authentication."
+              : "Password is required for Snowflake authentication."
+          )
+        }
         if (snowflake.auth_type === "keypair" && snowflake.secondary_secret.trim()) {
           extraConfig.secondary_secret_encrypted = snowflake.secondary_secret.trim()
         }
@@ -639,20 +670,28 @@ export default function ConnectionDialog({ onSaved, onClose, existing, trigger }
       } else if (type === "databricks") {
         const cleanHost = normalizeDatabricksHost(form.host)
         const cleanHttpPath = normalizeDatabricksHttpPath(databricks.http_path)
+        const cleanSchema = normalizeWarehouseSchema(form.schema, "Databricks")
         const extraConfig: Record<string, unknown> = {
           auth_type: databricks.auth_type,
           http_path: cleanHttpPath,
+          schema: cleanSchema,
         }
-        if (databricks.auth_type === "oauth_m2m") {
+        if (databricks.auth_type === "pat") {
+          if (dbSecretState.isRequired && !form.credential.trim()) {
+            throw new ConnectionValidationError("Personal Access Token is required for Databricks PAT authentication.")
+          }
+        } else if (databricks.auth_type === "oauth_m2m") {
           if (!databricks.client_id.trim()) {
-            throw new Error("Client ID is required for Databricks OAuth M2M authentication.")
+            throw new ConnectionValidationError("Client ID is required for Databricks OAuth M2M authentication.")
           }
           extraConfig.client_id = databricks.client_id.trim()
+          if (dbSecretState.isRequired && !databricks.secondary_secret.trim()) {
+            throw new ConnectionValidationError("Client Secret is required for Databricks OAuth M2M authentication.")
+          }
           if (databricks.secondary_secret.trim()) {
             extraConfig.secondary_secret_encrypted = databricks.secondary_secret.trim()
           }
         }
-        if (form.schema.trim()) extraConfig.schema = form.schema.trim()
         applyThreads(extraConfig)
 
         const payload: Record<string, unknown> = {
@@ -1248,11 +1287,12 @@ export default function ConnectionDialog({ onSaved, onClose, existing, trigger }
                       required
                     />
                   </Field>
-                  <Field label="Schema">
+                  <Field label="Schema" required>
                     <Input
                       value={form.schema}
                       onChange={setF("schema")}
                       placeholder="PUBLIC"
+                      required
                     />
                   </Field>
                 </div>
@@ -1307,39 +1347,39 @@ export default function ConnectionDialog({ onSaved, onClose, existing, trigger }
                   </Field>
 
                   {snowflake.auth_type === "password" ? (
-                    <Field label={isEdit ? "Password (leave blank to keep)" : "Password"} required={!isEdit}>
+                    <Field label={sfSecretState.canKeepExisting ? "Password (leave blank to keep)" : "Password"} required={sfSecretState.isRequired}>
                       <Input
                         type="password"
                         value={form.credential}
                         onChange={setF("credential")}
-                        placeholder={isEdit ? "••••••••" : ""}
-                        required={!isEdit}
+                        placeholder={sfSecretState.canKeepExisting ? "••••••••" : ""}
+                        required={sfSecretState.isRequired}
                       />
                     </Field>
                   ) : (
                     <>
                       <Field
-                        label={isEdit ? "Private Key PEM (leave blank to keep)" : "Private Key PEM"}
-                        required={!isEdit}
+                        label={sfSecretState.canKeepExisting ? "Private Key PEM (leave blank to keep)" : "Private Key PEM"}
+                        required={sfSecretState.isRequired}
                         hint="Unencrypted or encrypted PKCS#8 private key in PEM format."
                       >
                         <textarea
                           value={form.credential}
                           onChange={setF("credential")}
                           className={`${SELECT_CLS} min-h-24 py-2 font-mono text-xs`}
-                          placeholder={isEdit ? "•••••••• (unchanged)" : "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"}
-                          required={!isEdit}
+                          placeholder={sfSecretState.canKeepExisting ? "•••••••• (unchanged)" : "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"}
+                          required={sfSecretState.isRequired}
                         />
                       </Field>
                       <Field
-                        label={isEdit ? "Private Key Passphrase (leave blank to keep)" : "Private Key Passphrase"}
+                        label={sfSecretState.canKeepExisting ? "Private Key Passphrase (leave blank to keep)" : "Private Key Passphrase"}
                         hint="Optional passphrase if your private key is encrypted."
                       >
                         <Input
                           type="password"
                           value={snowflake.secondary_secret}
                           onChange={setSF("secondary_secret")}
-                          placeholder={isEdit ? "•••••••• (leave blank to keep existing)" : "Optional"}
+                          placeholder={sfSecretState.canKeepExisting ? "•••••••• (leave blank to keep existing)" : "Optional"}
                         />
                       </Field>
                     </>
@@ -1384,11 +1424,12 @@ export default function ConnectionDialog({ onSaved, onClose, existing, trigger }
                       placeholder="main"
                     />
                   </Field>
-                  <Field label="Schema" hint="Default schema (optional)">
+                  <Field label="Schema" required>
                     <Input
                       value={form.schema}
                       onChange={setF("schema")}
                       placeholder="default"
+                      required
                     />
                   </Field>
                   <Field label="Threads" hint={THREADS_HINT.databricks}>
@@ -1417,13 +1458,13 @@ export default function ConnectionDialog({ onSaved, onClose, existing, trigger }
                   </Field>
 
                   {databricks.auth_type === "pat" ? (
-                    <Field label={isEdit ? "Personal Access Token (leave blank to keep)" : "Personal Access Token"} required={!isEdit}>
+                    <Field label={dbSecretState.canKeepExisting ? "Personal Access Token (leave blank to keep)" : "Personal Access Token"} required={dbSecretState.isRequired}>
                       <Input
                         type="password"
                         value={form.credential}
                         onChange={setF("credential")}
-                        placeholder={isEdit ? "••••••••" : "dapi..."}
-                        required={!isEdit}
+                        placeholder={dbSecretState.canKeepExisting ? "••••••••" : "dapi..."}
+                        required={dbSecretState.isRequired}
                       />
                     </Field>
                   ) : (
@@ -1437,16 +1478,16 @@ export default function ConnectionDialog({ onSaved, onClose, existing, trigger }
                         />
                       </Field>
                       <Field
-                        label={isEdit ? "Client Secret (leave blank to keep)" : "Client Secret"}
-                        required={!isEdit}
+                        label={dbSecretState.canKeepExisting ? "Client Secret (leave blank to keep)" : "Client Secret"}
+                        required={dbSecretState.isRequired}
                         hint="Databricks OAuth secret"
                       >
                         <Input
                           type="password"
                           value={databricks.secondary_secret}
                           onChange={setDB("secondary_secret")}
-                          placeholder={isEdit ? "•••••••• (leave blank to keep existing)" : "Secret"}
-                          required={!isEdit}
+                          placeholder={dbSecretState.canKeepExisting ? "•••••••• (leave blank to keep existing)" : "Secret"}
+                          required={dbSecretState.isRequired}
                         />
                       </Field>
                     </>

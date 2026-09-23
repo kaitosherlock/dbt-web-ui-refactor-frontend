@@ -4,6 +4,8 @@ import {
   snowflakeAccountHost,
   normalizeDatabricksHost,
   normalizeDatabricksHttpPath,
+  normalizeWarehouseSchema,
+  getSecretFieldState,
   ConnectionValidationError,
 } from '@/features/connections/model/validation'
 
@@ -141,5 +143,137 @@ describe('normalizeDatabricksHttpPath', () => {
     expect(() => normalizeDatabricksHttpPath('/api/2.0/clusters')).toThrow(
       /Give a Databricks HTTP path shaped like/,
     )
+  })
+})
+
+describe('normalizeWarehouseSchema', () => {
+  it('accepts and trims valid schema names', () => {
+    expect(normalizeWarehouseSchema('PUBLIC', 'Snowflake')).toBe('PUBLIC')
+    expect(normalizeWarehouseSchema('  analytics  ', 'Databricks')).toBe('analytics')
+    expect(normalizeWarehouseSchema('dbt_prod', 'Snowflake')).toBe('dbt_prod')
+  })
+
+  it('rejects empty or whitespace-only schema with warehouse-specific message', () => {
+    expect(() => normalizeWarehouseSchema('', 'Databricks')).toThrow(ConnectionValidationError)
+    expect(() => normalizeWarehouseSchema('   ', 'Databricks')).toThrow(
+      /A Databricks connection needs a schema/,
+    )
+    expect(() => normalizeWarehouseSchema('', 'Snowflake')).toThrow(
+      /A Snowflake connection needs a schema/,
+    )
+  })
+
+  it('rejects null or undefined schema', () => {
+    expect(() => normalizeWarehouseSchema(null, 'Databricks')).toThrow(ConnectionValidationError)
+    expect(() => normalizeWarehouseSchema(undefined, 'Snowflake')).toThrow(ConnectionValidationError)
+  })
+})
+
+describe('getSecretFieldState', () => {
+  it('requires secret when creating a new connection (isEdit is false)', () => {
+    expect(
+      getSecretFieldState({
+        isEdit: false,
+        storedAuthType: 'pat',
+        selectedAuthType: 'pat',
+      }),
+    ).toEqual({
+      canKeepExisting: false,
+      isRequired: true,
+    })
+  })
+
+  it('allows keeping existing secret when stored auth_type equals selected auth_type', () => {
+    expect(
+      getSecretFieldState({
+        isEdit: true,
+        storedAuthType: 'pat',
+        selectedAuthType: 'pat',
+      }),
+    ).toEqual({
+      canKeepExisting: true,
+      isRequired: false,
+    })
+
+    expect(
+      getSecretFieldState({
+        isEdit: true,
+        storedAuthType: 'password',
+        selectedAuthType: 'password',
+      }),
+    ).toEqual({
+      canKeepExisting: true,
+      isRequired: false,
+    })
+
+    expect(
+      getSecretFieldState({
+        isEdit: true,
+        storedAuthType: 'keypair',
+        selectedAuthType: 'keypair',
+      }),
+    ).toEqual({
+      canKeepExisting: true,
+      isRequired: false,
+    })
+  })
+
+  it('requires secret when switching auth type (e.g. PAT -> OAuth M2M, or password -> keypair)', () => {
+    expect(
+      getSecretFieldState({
+        isEdit: true,
+        storedAuthType: 'pat',
+        selectedAuthType: 'oauth_m2m',
+      }),
+    ).toEqual({
+      canKeepExisting: false,
+      isRequired: true,
+    })
+
+    expect(
+      getSecretFieldState({
+        isEdit: true,
+        storedAuthType: 'oauth_m2m',
+        selectedAuthType: 'pat',
+      }),
+    ).toEqual({
+      canKeepExisting: false,
+      isRequired: true,
+    })
+
+    expect(
+      getSecretFieldState({
+        isEdit: true,
+        storedAuthType: 'password',
+        selectedAuthType: 'keypair',
+      }),
+    ).toEqual({
+      canKeepExisting: false,
+      isRequired: true,
+    })
+
+    expect(
+      getSecretFieldState({
+        isEdit: true,
+        storedAuthType: 'keypair',
+        selectedAuthType: 'password',
+      }),
+    ).toEqual({
+      canKeepExisting: false,
+      isRequired: true,
+    })
+  })
+
+  it('requires secret when storedAuthType is missing or null', () => {
+    expect(
+      getSecretFieldState({
+        isEdit: true,
+        storedAuthType: null,
+        selectedAuthType: 'pat',
+      }),
+    ).toEqual({
+      canKeepExisting: false,
+      isRequired: true,
+    })
   })
 })

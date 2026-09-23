@@ -8,6 +8,7 @@ import {
   parseSelectors,
   buildRunOptionsPayload,
   hasActiveRunOptions,
+  resolveStateTargets,
 } from "../src/features/develop/model/run-options"
 
 describe("run-options pure helpers", () => {
@@ -263,6 +264,71 @@ selectors:
       expect(hasActiveRunOptions({ vars: { a: 1 } })).toBe(true)
       expect(hasActiveRunOptions({ state_target: "prod", defer: true })).toBe(true)
       expect(hasActiveRunOptions({})).toBe(false)
+    })
+  })
+
+  describe("resolveStateTargets", () => {
+    it("excludes 'dev' from candidate targets and lists non-dev targets", () => {
+      const res = resolveStateTargets({
+        availableTargets: ["dev", "staging", "prod"],
+        stateTargets: [{ target: "dev", manifest: true }],
+        currentTarget: "dev",
+      })
+      expect(res.candidateTargets).toEqual(["staging", "prod"])
+      expect(res.candidateTargets).not.toContain("dev")
+    })
+
+    it("combines targets from availableTargets and GET /dbt/state reports", () => {
+      const res = resolveStateTargets({
+        availableTargets: ["staging"],
+        stateTargets: [
+          { target: "prod", manifest: true },
+          { target: "nightly_schedule", manifest: true },
+        ],
+      })
+      expect(res.candidateTargets).toEqual(["staging", "prod", "nightly_schedule"])
+    })
+
+    it("defaults to the first target with state", () => {
+      const res = resolveStateTargets({
+        availableTargets: ["staging", "prod"],
+        stateTargets: [
+          { target: "staging", manifest: false },
+          { target: "prod", manifest: true },
+        ],
+      })
+      expect(res.selectedTarget).toBe("prod")
+      expect(res.hasState).toBe(true)
+    })
+
+    it("preserves current non-dev target if present in candidates", () => {
+      const res = resolveStateTargets({
+        availableTargets: ["staging", "prod"],
+        stateTargets: [{ target: "prod", manifest: true }],
+        currentTarget: "staging",
+      })
+      expect(res.selectedTarget).toBe("staging")
+      expect(res.hasState).toBe(false)
+    })
+
+    it("replaces 'dev' currentTarget with the first target with state", () => {
+      const res = resolveStateTargets({
+        availableTargets: ["staging", "prod"],
+        stateTargets: [{ target: "prod", manifest: true }],
+        currentTarget: "dev",
+      })
+      expect(res.selectedTarget).toBe("prod")
+      expect(res.hasState).toBe(true)
+    })
+
+    it("handles empty targets gracefully", () => {
+      const res = resolveStateTargets({
+        availableTargets: ["dev"],
+        stateTargets: [],
+      })
+      expect(res.candidateTargets).toEqual([])
+      expect(res.selectedTarget).toBe("")
+      expect(res.hasState).toBe(false)
     })
   })
 })

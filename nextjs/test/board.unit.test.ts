@@ -41,6 +41,13 @@ describe('shared chart draft', () => {
     expect(chartReady(seeded, ['month'])).toBe(false)
   })
 
+  it('chooses distinct dimension and measure when all result columns are numeric', () => {
+    const seeded = suggestChart(['order_count', 'revenue'], ['order_count', 'revenue'], draft)
+    expect(seeded.fields.x).toBe('order_count')
+    expect(seeded.fields.y).toBe('revenue')
+    expect(seeded.fields.x).not.toBe(seeded.fields.y)
+  })
+
   it('sends only the channels the chosen type owns', () => {
     const seeded = suggestChart(['month', 'revenue'], ['revenue'], draft)
     expect(chartPayload(seeded)).toEqual({ type: 'bar', title: 'Revenue', number_format: 'currency', x: 'month', y: 'revenue' })

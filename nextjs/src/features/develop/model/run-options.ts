@@ -375,3 +375,48 @@ export function saveRunOptions(
     // Ignore storage quota errors
   }
 }
+
+export interface StateTargetResolution {
+  candidateTargets: string[]
+  selectedTarget: string
+  hasState: boolean
+}
+
+/**
+ * Resolve state targets for state & defer options.
+ * The server never saves state for 'dev' (only non-dev targets and schedules).
+ * Lists the project's non-dev targets (from targets API) plus any target that
+ * GET /dbt/state reports, defaulting to the first target with state artifacts.
+ */
+export function resolveStateTargets({
+  availableTargets,
+  stateTargets,
+  currentTarget,
+}: {
+  availableTargets: string[]
+  stateTargets: Array<{ target: string; manifest?: boolean }>
+  currentTarget?: string | null
+}): StateTargetResolution {
+  const nonDevAvailable = (availableTargets || []).filter((t) => t && t !== "dev")
+  const fromStateApi = (stateTargets || []).map((s) => s.target).filter((t) => t && t !== "dev")
+  const candidateTargets = Array.from(new Set([...nonDevAvailable, ...fromStateApi]))
+
+  const targetsWithState = new Set(
+    (stateTargets || []).filter((s) => s.manifest && s.target !== "dev").map((s) => s.target),
+  )
+
+  const firstWithState = candidateTargets.find((t) => targetsWithState.has(t)) || candidateTargets[0] || ""
+
+  let selectedTarget = firstWithState
+  if (currentTarget && currentTarget !== "dev" && candidateTargets.includes(currentTarget)) {
+    selectedTarget = currentTarget
+  }
+
+  const hasState = Boolean(selectedTarget && targetsWithState.has(selectedTarget))
+
+  return {
+    candidateTargets,
+    selectedTarget,
+    hasState,
+  }
+}
