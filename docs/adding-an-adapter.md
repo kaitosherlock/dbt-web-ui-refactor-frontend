@@ -10,11 +10,11 @@ in `connections.connection_type` and used as the registry key.
 
 ## 0. Before starting
 
-- Check the dbt plugin supports the pinned dbt-core minor (1.10.x - dbt-dremio
-  blocks 1.11): `curl -s https://pypi.org/pypi/<pkg>/<ver>/json` and read
-  `requires_dist` for `dbt-core` / `dbt-adapters`. Prefer the release line with
-  the same minor as dbt-core (Snowflake: `dbt-snowflake==1.10.8`). Skip and
-  report an adapter that has none.
+- Check the dbt plugin supports the pinned dbt-core (1.11.x): `curl -s
+  https://pypi.org/pypi/<pkg>/<ver>/json` and read `requires_dist` for
+  `dbt-core` / `dbt-adapters`. The tightest constraint today is dbt-databricks
+  1.11.8 (`dbt-adapters<1.23`), which is why dbt-postgres stays on 1.10.2 -
+  a new plugin must fit inside that range too. Skip and report one that does not.
 - Decide the auth modes and, for each, **which value is the secret**. A
   connection row has one secret column (`password_encrypted`) and one optional
   second slot (`extra_config.secondary_secret_encrypted`, see step 4). A mode
@@ -167,7 +167,7 @@ Copy `tests/test_snowflake_adapter.py` and keep every section:
   only if it names the new type (it now uses `not_a_warehouse`).
 
 Run `cd dbt-runner && uv run python -m pytest -q -p no:cacheprovider` and diff
-the failing ids against `docs/codex/baseline-failures.txt` - zero new.
+the suite must stay green.
 
 ## 9. Docs
 

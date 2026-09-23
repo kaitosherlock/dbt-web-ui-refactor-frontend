@@ -21,6 +21,7 @@ cd dbt-runner && uv sync --frozen --extra test && uv run pytest -q
 uv run uvicorn app.main:app --reload --port 8080
 docker compose up -d
 docker compose --profile demo up -d demo-source   # dummy CRM Postgres for trying ingest
+uv run --with httpx python e2e/dbt_flow.py --adapter postgres --cleanup   # full dbt flow against the running stack (e2e/README.md)
 ```
 
 ## Key decisions
@@ -67,7 +68,8 @@ exempt from the "no deep imports elsewhere" rule since nothing outside that
 feature should import it anyway — Prisma access is meant to stay there.
 
 **Query engine.** DuckDB is the only engine we run: `dbt-duckdb` executes models
-and reads the DuckLake lakehouse. Postgres/Oracle/Dremio/Spark are pass-throughs.
+and reads the DuckLake lakehouse. Postgres/Oracle/Dremio/Spark/Snowflake/Databricks
+are pass-throughs. Adding one: `docs/adding-an-adapter.md`.
 DuckDB's defaults are wrong here (it takes ~80% of visible memory), so
 `app/core/duckdb_resources.py` derives a per-run share from the cgroup limit
 divided by `concurrent_engine_slots()` = `MAX_CONCURRENT_DBT_RUNS +
