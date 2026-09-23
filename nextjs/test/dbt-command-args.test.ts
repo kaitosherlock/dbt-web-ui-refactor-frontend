@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildDbtAdditionalArgs,
   buildDbtCommandWithArgs,
-} from "../src/lib/dbt-command-args";
+} from "../src/features/develop/model/dbt-command-args";
 
 describe("dbt command args", () => {
   it("keeps vars args intact", () => {

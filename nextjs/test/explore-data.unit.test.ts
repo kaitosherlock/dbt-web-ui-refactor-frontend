@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { metadataEntries, sqlSuggestions, starterQuery, columnExpression, readDrafts, closeDraft, draftDirty } from "@/lib/explore-data"
+import { metadataEntries, sqlSuggestions, starterQuery, columnExpression, readDrafts, closeDraft, draftDirty } from "@/features/explore/model/explore-data"
 
 const entries = metadataEntries({ models: [{ name: "orders", unique_id: "model.sales.orders", path: "models/orders.sql", columns: [{ name: "amount", data_type: "DECIMAL" }, { name: "order date" }] }], sources: [{ source_name: "raw", table_name: "customers", unique_id: "source.sales.raw.customers", path: "models/sources.yml", columns: [{ name: "customer_id", data_type: "INT" }] }] })
 

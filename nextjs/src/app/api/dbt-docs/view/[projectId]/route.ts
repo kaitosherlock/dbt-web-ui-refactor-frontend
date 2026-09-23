@@ -1,4 +1,4 @@
-import { auth } from '@/lib/auth'
+import { auth } from '@/server/auth/auth'
 
 export async function GET(
   _request: Request,
@@ -11,7 +11,7 @@ export async function GET(
 
   const { projectId } = await params
 
-  const { getDbtRunnerUrl } = await import('@/lib/api/client')
+  const { getDbtRunnerUrl } = await import('@/common/api/client')
   const dbtRunnerUrl = getDbtRunnerUrl()
 
   const res = await fetch(`${dbtRunnerUrl}/dbt/docs/view/${projectId}`)

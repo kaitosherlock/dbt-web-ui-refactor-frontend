@@ -1,7 +1,7 @@
 # 02 — Chạy dbt từ Develop
 
-> Tham chiếu: `nextjs/src/lib/hooks/useDbtRunStream.ts`,
-> `nextjs/src/lib/dbt-command-args.ts`,
+> Tham chiếu: `nextjs/src/entities/run/hooks/useDbtRunStream.ts`,
+> `nextjs/src/features/develop/model/dbt-command-args.ts`,
 > `dbt-runner/app/routers/{sse,dbt}.py`,
 > `dbt-runner/app/services/{dbt_service,dbt_worker,command}.py`.
 
@@ -53,7 +53,7 @@ Hệ quả có chủ đích:
 
 ## 2. Ghép câu lệnh
 
-`nextjs/src/lib/dbt-command-args.ts` — một chỗ duy nhất, tất cả lối vào đều đi qua đây.
+`nextjs/src/features/develop/model/dbt-command-args.ts` — một chỗ duy nhất, tất cả lối vào đều đi qua đây.
 
 ```ts
 buildDbtCommandWithArgs(command, extraArgs, fullRefresh, target)

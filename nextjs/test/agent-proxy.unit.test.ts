@@ -1,4 +1,4 @@
-import { proxyRequest } from "@/lib/api/proxy"
+import { proxyRequest } from "@/server/proxy"
 
 const originalFetch = globalThis.fetch
 

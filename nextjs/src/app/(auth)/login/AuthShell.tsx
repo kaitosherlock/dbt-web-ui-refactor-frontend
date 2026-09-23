@@ -1,5 +1,5 @@
-import BrandMark from "@/components/shared/BrandMark"
-import { PRODUCT_TAGLINE } from "@/lib/branding"
+import BrandMark from "@/common/components/BrandMark"
+import { PRODUCT_TAGLINE } from "@/common/lib/branding"
 
 /**
  * The frame both sign-in states share, so a single-user install and an SSO

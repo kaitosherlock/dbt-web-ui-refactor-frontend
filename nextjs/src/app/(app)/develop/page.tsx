@@ -3,14 +3,14 @@
 import React, { useState, useEffect } from "react"
 import Link from "next/link"
 import { Plus, Search, FolderGit2 } from "lucide-react"
-import { getProjects, hardDeleteProject, softDeleteProject } from "@/lib/api-client"
-import { getDbtRunnerUrl } from "@/lib/api/client"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import ProjectList from "@/components/develop/ProjectList"
-import EmptyState from "@/components/shared/EmptyState"
-import { DeleteProjectDialog } from "@/components/develop/transforms/DeleteProjectDialog"
-import PageHeader from "@/components/layout/PageHeader"
+import { getProjects, hardDeleteProject, softDeleteProject } from "@/entities/project"
+import { getDbtRunnerUrl } from '@/common/api/client'
+import { Button } from "@/common/ui/button"
+import { Input } from "@/common/ui/input"
+import ProjectList from "@/features/projects/components/ProjectList"
+import EmptyState from "@/common/components/EmptyState"
+import { DeleteProjectDialog } from "@/features/projects/components/DeleteProjectDialog"
+import PageHeader from "@/common/layout/PageHeader"
 
 interface DbtProject {
   id: string

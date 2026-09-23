@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getSessionOrNull } from '@/lib/session'
+import { getSessionOrNull } from '@/server/session'
 import * as fs from 'fs/promises'
 import * as path from 'path'
 

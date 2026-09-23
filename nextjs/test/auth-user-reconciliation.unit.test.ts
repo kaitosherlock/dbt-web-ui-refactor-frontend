@@ -9,7 +9,7 @@ const dbMock = vi.hoisted(() => ({
   },
 }))
 
-vi.mock("@/lib/db", () => ({ db: dbMock }))
+vi.mock("@/server/db", () => ({ db: dbMock }))
 
 vi.mock("next-auth", () => ({
   default: () => ({
@@ -27,7 +27,7 @@ vi.mock("next-auth/providers/credentials", () => ({
 async function loadAuthCallbacks(authDisabled: boolean) {
   vi.stubEnv("AUTH_DISABLED", authDisabled ? "true" : "false")
   vi.resetModules()
-  const authModule = await import("../src/lib/auth")
+  const authModule = await import("../src/server/auth/auth")
   return authModule.authCallbacks
 }
 

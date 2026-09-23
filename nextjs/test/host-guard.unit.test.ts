@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { HostNotAllowed, assertUrlHostAllowed } from '@/lib/host-guard'
+import { HostNotAllowed, assertUrlHostAllowed } from '@/server/host-guard'
 
 // Literal addresses only: isIP short-circuits the lookup, so the suite needs no
 // DNS and no network.

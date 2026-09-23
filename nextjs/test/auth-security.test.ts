@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { authConfig } from "../src/lib/auth.config";
-import { isMalformedBearerHeader } from "../src/lib/auth-headers";
-import { refreshAccessToken } from "../src/lib/auth-refresh";
+import { authConfig } from "../src/server/auth/auth.config";
+import { isMalformedBearerHeader } from "../src/server/auth/auth-headers";
+import { refreshAccessToken } from "../src/server/auth/auth-refresh";
 
 describe("authentication security boundaries", () => {
   afterEach(() => {

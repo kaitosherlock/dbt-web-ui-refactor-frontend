@@ -1,9 +1,11 @@
 # 05 — API reference (phạm vi Develop)
 
-> Base URL runner: `getDbtRunnerUrl()` (`nextjs/src/lib/api/client.ts`).
+> Base URL runner: `getDbtRunnerUrl()` (`nextjs/src/common/api/client.ts`).
 > Mọi endpoint runner yêu cầu `Authorization: Bearer <accessToken>` và tự kiểm tra
 > quyền sở hữu project (`_verify_project_ownership`).
-> Client tương ứng: `nextjs/src/lib/api/{dbt,files,git,env-vars}.ts`.
+> Client tương ứng: `nextjs/src/features/develop/api.ts` (dbt),
+> `nextjs/src/entities/file/api.ts` (files), `nextjs/src/features/git/api.ts` (git),
+> `nextjs/src/features/projects/api.ts` (env-vars).
 
 ## 1. Chạy lệnh & stream
 
