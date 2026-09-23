@@ -327,42 +327,46 @@ async def retry_dbt_run(
 ):
     """Start `dbt retry` for an owned failed run's project.
 
-    dbt retry reads whatever target/run_results.json holds, and any later run,
-    compile or show replaces it. The run asked for must therefore be the
-    invocation those results belong to, or retry would replay a different one.
+    Plain `dbt retry` reads whatever target/run_results.json currently holds,
+    and any dbt show/compile/preview on the same project - none of which take
+    the run lock - can replace that file between this endpoint's checks and
+    the retry subprocess actually reading it. The failed run's own results are
+    already stored on its dbt_runs row, so they are written here to a private,
+    run-scoped directory and the retry is pointed at it with `--state DIR`
+    (StateService.write_retry_results; dbt's RetryTask only reads
+    DIR/run_results.json, never a manifest from DIR).
     """
     user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
     row = await _load_owned_dbt_run(session, run_id, user_id)
     if row["status"] != "error":
         raise HTTPException(status_code=409, detail="Only a failed run can be retried")
     project_id = str(row["project_id"])
-    project_path = await ProjectService().get_or_sync(project_id)
-    latest = StateService.load_retry_results(project_path)
+
     stored = row.get("results")
     if isinstance(stored, str):
         try:
             stored = json.loads(stored)
         except ValueError:
             stored = None
-    stored_invocation = ((stored or {}).get("metadata") or {}).get("invocation_id")
-    latest_invocation = (latest.get("metadata") or {}).get("invocation_id")
-    if not stored_invocation:
+    if not isinstance(stored, dict) or not stored.get("args"):
         raise HTTPException(
             status_code=409,
             detail="This run left no dbt run results, so there is nothing to retry",
         )
-    if stored_invocation != latest_invocation:
-        raise HTTPException(
-            status_code=409,
-            detail="A later dbt command replaced this run's results; "
-            "only the most recent run of the project can be retried",
-        )
-    previous_args = latest.get("args") or {}
+    previous_args = stored.get("args") or {}
     if previous_args.get("which") not in RETRYABLE_COMMANDS:
         raise HTTPException(
             status_code=409,
             detail=f"dbt retry cannot replay '{previous_args.get('which')}'",
         )
+
+    # Keyed by this retry *attempt's* own run id, pre-generated here and handed
+    # to launch_dbt_run, rather than by the failed run's id: two retries of the
+    # same failed run started close together must not let the first one's
+    # completion delete the directory the second one's subprocess still needs.
+    retry_run_id = str(uuid.uuid4())
+    retry_state_dir = StateService().write_retry_results(project_id, retry_run_id, stored)
+
     # dbt ignores --target on retry (it reuses the failed run's); passing it
     # only tells run_command which target's state a successful retry refreshes.
     previous_target = previous_args.get("target")
@@ -376,7 +380,18 @@ async def retry_dbt_run(
         ),
         environment_variables=request.environment_variables,
     )
-    return await launch_dbt_run(command, user_id, session=session)
+    command._retry_state_dir = retry_state_dir
+
+    async def _cleanup_retry_dir(_summary: Dict[str, Any]) -> None:
+        StateService().delete_retry_dir(project_id, retry_run_id)
+
+    return await launch_dbt_run(
+        command,
+        user_id,
+        session=session,
+        on_complete=_cleanup_retry_dir,
+        run_id=retry_run_id,
+    )
 
 
 @router.post("/runs/clone", status_code=status.HTTP_202_ACCEPTED)
@@ -971,7 +986,9 @@ def _lake_references(project_path: Path) -> List[str]:
         except OSError:
             continue
         if _LAKE_DATABASE_RE.search(content):
-            hits.append(str(path.relative_to(project_path)))
+            # API/config paths are portable project-relative identifiers, not
+            # host filesystem paths. Keep them stable for Linux and Windows.
+            hits.append(path.relative_to(project_path).as_posix())
     return hits
 
 

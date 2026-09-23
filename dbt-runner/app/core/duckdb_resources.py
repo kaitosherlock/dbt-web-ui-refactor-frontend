@@ -18,6 +18,8 @@ import nothing from `app`, so the numbers are computed here and passed in.
 
 import logging
 import os
+import posixpath
+import sys
 import uuid
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -45,7 +47,34 @@ def _host_memory_bytes() -> Optional[int]:
     try:
         return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
     except (ValueError, OSError, AttributeError):
-        return None
+        if sys.platform != "win32":
+            return None
+
+    # os.sysconf is unavailable on Windows. Keep this dependency-free: the
+    # runner only needs the installed physical-memory total from Win32.
+    try:
+        import ctypes
+
+        class MemoryStatus(ctypes.Structure):
+            _fields_ = [
+                ("length", ctypes.c_ulong),
+                ("memory_load", ctypes.c_ulong),
+                ("total_physical", ctypes.c_ulonglong),
+                ("available_physical", ctypes.c_ulonglong),
+                ("total_page_file", ctypes.c_ulonglong),
+                ("available_page_file", ctypes.c_ulonglong),
+                ("total_virtual", ctypes.c_ulonglong),
+                ("available_virtual", ctypes.c_ulonglong),
+                ("available_extended_virtual", ctypes.c_ulonglong),
+            ]
+
+        status = MemoryStatus()
+        status.length = ctypes.sizeof(status)
+        if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+            return int(status.total_physical)
+    except (AttributeError, OSError):
+        pass
+    return None
 
 
 def _cgroup_memory_bytes() -> Optional[int]:
@@ -145,8 +174,20 @@ def temp_directory(project_id: Optional[str] = None) -> str:
     sharing one directory can collide. The project is already the unit that owns
     a DuckDB file, so it is the unit that owns the spill too.
     """
-    base = settings.duckdb_temp_dir or str(Path(settings.storage_dir) / "duckdb-tmp")
+    configured = settings.duckdb_temp_dir
+    storage = settings.storage_dir
+    if configured:
+        base = configured
+    elif os.name == "nt" and storage.startswith("/"):
+        base = posixpath.join(storage, "duckdb-tmp")
+    else:
+        base = str(Path(storage) / "duckdb-tmp")
     safe_project_id = _safe_project_segment(project_id)
+    # Tests and configuration tools can render a Linux profile on Windows.
+    # Such a value is configuration for the Linux container, not a local path,
+    # so preserve its POSIX spelling. Native Windows paths still use Path.
+    if os.name == "nt" and base.startswith("/"):
+        return posixpath.join(base, safe_project_id) if safe_project_id else base
     return str(Path(base) / safe_project_id) if safe_project_id else base
 
 

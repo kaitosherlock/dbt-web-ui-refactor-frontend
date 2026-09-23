@@ -142,7 +142,7 @@ def test_a_csv_directory_loads_as_a_table(tmp_path, monkeypatch):
         "cursor_initial_value": None,
         "source": {
             "type": "filesystem",
-            "bucket_url": f"file://{data}",
+            "bucket_url": data.resolve().as_uri(),
             "file_glob": "*.csv",
             "format": "csv",
             "table": "dropped_files",

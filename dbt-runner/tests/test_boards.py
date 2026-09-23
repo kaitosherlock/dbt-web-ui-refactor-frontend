@@ -103,7 +103,9 @@ def test_filters_are_bound_on_each_refresh():
 def test_board_routes_check_project_owner_before_parsing_or_execution(monkeypatch):
     from fastapi import FastAPI, HTTPException
     from fastapi.testclient import TestClient
+    from app.config import settings
     from app.routers import charts
+    monkeypatch.setattr(settings, 'auth_disabled', False)
     app = FastAPI()
     app.include_router(charts.router)
     app.dependency_overrides[charts.get_session] = lambda: None

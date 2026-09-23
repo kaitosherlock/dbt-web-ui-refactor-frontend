@@ -119,10 +119,14 @@ async def launch_dbt_run(
     session,
     on_complete: Optional[CompletionHook] = None,
     persist_state: bool = False,
+    run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Insert the run row, start the run, and return its identifiers.
 
     Returns as soon as the row exists - the dbt process outlives this call.
+    `run_id`, when given, is used instead of a freshly generated one - the
+    retry endpoint pre-generates it so a private per-attempt directory (see
+    StateService.write_retry_results) can be named before this run exists.
     """
     # Both the async endpoint and the scheduler arrive here. Refuse the request
     # before either caller gets a run row for a command that cannot be started.
@@ -151,7 +155,7 @@ async def launch_dbt_run(
         favor_state=request.favor_state,
     )
 
-    run_id = str(uuid.uuid4())
+    run_id = run_id or str(uuid.uuid4())
     started_at = datetime.now(timezone.utc)
     await DbtService._insert_run_start(
         session,

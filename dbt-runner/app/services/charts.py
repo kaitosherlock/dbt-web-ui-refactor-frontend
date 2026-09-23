@@ -8,6 +8,7 @@ import asyncio
 import json
 import math
 import os
+import shutil
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -124,8 +125,11 @@ async def render_chart(request: ChartRequest) -> dict:
 
 
 async def render_board_yaml(board: str, *, validate: bool = False) -> dict:
-    executable = Path(sys.executable).with_name("dct")
-    if not executable.is_file():
+    # Console scripts have no suffix on POSIX and use PATHEXT (normally .exe)
+    # in a Windows virtualenv. Restrict the first lookup to this interpreter's
+    # scripts directory so a globally installed, incompatible dct cannot win.
+    executable = shutil.which("dct", path=str(Path(sys.executable).parent))
+    if not executable:
         raise RuntimeError("dbt-charts is not installed. Rebuild dbt-runner with the current lockfile.")
     try:
         await asyncio.wait_for(_render_slots.acquire(), timeout=1)
@@ -138,9 +142,24 @@ async def render_board_yaml(board: str, *, validate: bool = False) -> dict:
             (root / "charts").mkdir()
             (root / "charts" / "result.yml").write_text(board, encoding="utf-8")
             output = root / "result.html"
-            env = {key: os.environ[key] for key in ("PATH", "SYSTEMROOT", "LANG") if key in os.environ}
+            allowed_env = ["PATH", "SYSTEMROOT", "LANG"]
+            if os.name == "nt":
+                # The dct import graph calls Path.home(), and temporary output
+                # uses the OS temp directory. These locate local directories;
+                # unlike the deliberately omitted DB/warehouse variables they
+                # carry no credentials.
+                allowed_env += [
+                    "USERPROFILE",
+                    "HOMEDRIVE",
+                    "HOMEPATH",
+                    "APPDATA",
+                    "LOCALAPPDATA",
+                    "TEMP",
+                    "TMP",
+                ]
+            env = {key: os.environ[key] for key in allowed_env if key in os.environ}
             env.update(DBT_SEND_ANONYMOUS_USAGE_STATS="false", PYTHONIOENCODING="utf-8")
-            args = [str(executable), "validate" if validate else "render", "charts/result.yml", "--project-dir", str(root), "--json" if validate else "--diagnostics-json"]
+            args = [executable, "validate" if validate else "render", "charts/result.yml", "--project-dir", str(root), "--json" if validate else "--diagnostics-json"]
             if not validate:
                 args += ["--format", "html", "--output", str(output), "--no-cache"]
             process = await asyncio.create_subprocess_exec(

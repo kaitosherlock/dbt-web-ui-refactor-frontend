@@ -43,6 +43,13 @@ def _validate_project_id(project_id: str) -> str:
         raise DbtOperationError("state", "invalid project identifier") from None
 
 
+def _validate_run_id(run_id: str) -> str:
+    try:
+        return str(uuid.UUID(str(run_id or "").strip()))
+    except (ValueError, AttributeError, TypeError):
+        raise DbtOperationError("state", "invalid run identifier") from None
+
+
 def validate_target_name(target: str) -> str:
     if not TARGET_NAME_RE.fullmatch(target or ""):
         raise DbtOperationError(
@@ -92,6 +99,19 @@ def resolve_request_state(
                 "dbt retry reuses the failed run's own state options; "
                 "state_target and defer are not accepted",
             )
+        retry_state_dir = getattr(request, "_retry_state_dir", None)
+        if retry_state_dir is not None:
+            # The retry endpoint already wrote the failed run's own
+            # run_results.json into this private, run-scoped directory.
+            # Nothing else may write there, so a dbt show/compile/preview on
+            # the same project in between - none of which take the run lock -
+            # cannot replace it out from under this retry the way it can
+            # target/run_results.json.
+            return Path(retry_state_dir)
+        # Reached only via the generic /dbt/command path with command="retry"
+        # (not the dedicated retry endpoint, so there is no private directory
+        # to point at): fall back to plain `dbt retry` semantics, reading
+        # whatever is currently in target/run_results.json.
         state.require_retry_results(project_path)
         return None
     if command_name == "clone" and not request.state_target:
@@ -146,6 +166,46 @@ class StateService:
         if not isinstance(data, dict):
             raise DbtOperationError("retry", "target/run_results.json is not valid")
         return data
+
+    def retry_dir(self, project_id: str, run_id: str) -> Path:
+        """A private, run-scoped directory holding one failed run's own results.
+
+        Keyed by run id rather than by target: unlike target/run_results.json,
+        nothing but write_retry_results ever writes here, so a dbt
+        show/compile/preview on the same project - none of which take the run
+        lock - cannot replace it between the retry endpoint's checks and the
+        `dbt retry` subprocess actually reading it.
+        """
+        return self.project_dir(project_id) / ".retry" / _validate_run_id(run_id)
+
+    def write_retry_results(
+        self, project_id: str, run_id: str, results: Dict[str, Any]
+    ) -> Path:
+        """Write a failed run's stored results for `dbt retry --state DIR`.
+
+        dbt's RetryTask (dbt/task/retry.py) reads only DIR/run_results.json
+        for the previous invocation's args and node statuses; it re-parses the
+        project's own manifest rather than reading one from DIR, so nothing
+        else needs to be written here.
+        """
+        directory = self.retry_dir(project_id, run_id)
+        directory.mkdir(parents=True, exist_ok=True)
+        destination = directory / "run_results.json"
+        fd, temporary_name = tempfile.mkstemp(
+            prefix=".run_results.", suffix=".tmp", dir=directory
+        )
+        os.close(fd)
+        temporary = Path(temporary_name)
+        try:
+            temporary.write_text(json.dumps(results), encoding="utf-8")
+            os.replace(temporary, destination)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return directory
+
+    def delete_retry_dir(self, project_id: str, run_id: str) -> None:
+        """Best-effort cleanup once a retry run has finished."""
+        shutil.rmtree(self.retry_dir(project_id, run_id), ignore_errors=True)
 
     @staticmethod
     def _copy_atomic(source: Path, destination: Path) -> None:

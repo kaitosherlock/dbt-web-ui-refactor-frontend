@@ -77,3 +77,17 @@ tests, then merge codex/dbt1-parity into main locally (no push).
   compatibility checks listed in the killed prompt, 3) full suite vs
   baseline-failures.txt, 4) commit, then continue: rest of 5b → 6 → AGY
   frontend → token-fetch fix → merge to main → cleanup.
+
+## 2026-09-24 queue (user: fix everything incl. pre-existing errors)
+- Codex: fix_baseline (all 61+4+5 pre-existing backend failures) - running
+- Codex: e2e/dbt_flow.py driver - running
+- AGY: F2 - running; then F-fix: 23 pre-existing tsc errors + 13 lint errors; then F3
+- Then: rebuild stack, run e2e (postgres, databricks), fix, rerun; merge to main + push;
+  revoke Databricks PAT id 4a6d89bb...; cleanup per "Cleanup after merge".
+
+## AUTONOMOUS MODE (user, 2026-09-24 02:21)
+- Orchestrator decides everything, no questions. Hard stop by ~07:00-07:30 (machine shuts down 08:00).
+- Worker out of quota -> fall back to Claude subagents (sonnet) automatically.
+- Skip auth/security hardening this phase; don't over-test the obvious.
+- If done early: UI/UX + full-flow manual test with Databricks and basic features.
+- Before stopping: commit + push + merge to main + push main, revoke Databricks PAT, cleanup.

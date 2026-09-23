@@ -30,10 +30,12 @@ models are written. Add it when a project actually needs two.
 """
 
 import logging
+import os
+import posixpath
 import re
 import shutil
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
@@ -203,9 +205,18 @@ def validate_data_path(path: str) -> str:
     if _is_object_storage(candidate):
         return candidate
 
-    resolved = Path(candidate).resolve()
-
-    own = Path(settings.lake_data_dir or str(Path(settings.storage_dir) / "lake")).resolve()
+    configured_own = settings.lake_data_dir or str(Path(settings.storage_dir) / "lake")
+    if os.name == "nt" and candidate.startswith("/"):
+        # A Windows development box may validate configuration intended for a
+        # Linux deployment. Treat slash-rooted values as POSIX paths so drive
+        # resolution does not turn /mnt into F:\\mnt.
+        resolved = PurePosixPath(posixpath.normpath(candidate))
+        own = PurePosixPath(posixpath.normpath(configured_own))
+        path_type = PurePosixPath
+    else:
+        resolved = Path(candidate).resolve()
+        own = Path(configured_own).resolve()
+        path_type = Path
     if resolved == own or own in resolved.parents:
         raise LakehouseError(
             f"'{path}' is inside this deployment's own lake directory. That space "
@@ -221,7 +232,11 @@ def validate_data_path(path: str) -> str:
             "external lakehouse may use, or give an object-storage URL."
         )
     for root in roots:
-        allowed = Path(root).resolve()
+        allowed = (
+            path_type(posixpath.normpath(root))
+            if path_type is PurePosixPath
+            else Path(root).resolve()
+        )
         if resolved == allowed or allowed in resolved.parents:
             return str(resolved)
 
@@ -244,6 +259,9 @@ def attach_string(url: str, *, password: Optional[str] = None) -> str:
         # DuckLake takes a plain file path. Both sqlite:///x and sqlite:////x are
         # written in the wild, so collapse the leading slashes to one.
         path = parsed.path or url
+        if os.name == "nt" and re.match(r"^/[A-Za-z]:[\\/]", path):
+            path = path[1:]
+            return f"ducklake:sqlite:{path}"
         return f"ducklake:sqlite:/{path.lstrip('/')}"
 
     if scheme not in ("postgres", "postgresql"):
