@@ -7,11 +7,11 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { XCircle } from 'lucide-react';
-import TerminalOutput from '@/features/develop/components/TerminalOutput';
-import QueryResultsTable from '@/features/develop/components/QueryResultsTable';
-import CompiledSQLView from '@/features/develop/components/CompiledSQLView';
-import QueryPlanView from '@/features/develop/components/QueryPlanView';
-import LineageView from '@/features/develop/components/LineageView';
+import TerminalOutput from '../../TerminalOutput';
+import QueryResultsTable from '../../QueryResultsTable';
+import CompiledSQLView from '../../CompiledSQLView';
+import QueryPlanView from '../../QueryPlanView';
+import LineageView from '../../LineageView';
 
 type TerminalTabType = 'results' | 'lineage' | 'compiled' | 'queryPlan' | 'logs';
 type QueryPanelView = 'results' | 'plan';

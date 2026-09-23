@@ -3,8 +3,8 @@
 import React, { useEffect, useMemo, useState } from "react"
 import { Download } from "lucide-react"
 import { Button } from "@/common/ui/button"
-import { numericChartColumns } from "@/features/explore/model/query-chart"
-import { SNAPSHOT_TYPES, emptyChartDraft, suggestChart, type ChartDraft } from "@/features/explore/model/board"
+import { numericChartColumns } from "../model/query-chart"
+import { SNAPSHOT_TYPES, emptyChartDraft, suggestChart, type ChartDraft } from "../model/board"
 import ChartBuilder, { type RenderedChart } from "./ChartBuilder"
 
 interface Props {

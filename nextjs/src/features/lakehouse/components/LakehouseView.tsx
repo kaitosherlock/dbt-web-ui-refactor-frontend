@@ -6,7 +6,7 @@ import { Button } from "@/common/ui/button"
 import { Card, CardContent } from "@/common/ui/card"
 import { Input } from "@/common/ui/input"
 import EmptyState from "@/common/components/EmptyState"
-import { getIcebergMeta, publishIceberg, type IcebergPublishResult } from "@/features/lakehouse/api"
+import { getIcebergMeta, publishIceberg, type IcebergPublishResult } from "../api"
 import { getProjects } from "@/entities/project"
 
 // Mirrors _NAME_RE in dbt-runner/app/routers/lake.py, which is the enforcing side.

@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { History, RefreshCw, GitCommit, User, Clock } from 'lucide-react';
-import { gitApi, type GitCommitInfo } from '@/features/git/api';
+import { gitApi, type GitCommitInfo } from '../api';
 
 interface CommitHistoryProps {
     projectId: string;

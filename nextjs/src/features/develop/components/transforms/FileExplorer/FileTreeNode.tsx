@@ -8,7 +8,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { ChevronRight, ChevronDown } from 'lucide-react';
-import { type FileNode } from '@/features/develop/types';
+import { type FileNode } from '../../../types';
 import InlineInput from './InlineInput';
 import type { InlineEditState } from './index';
 import { FileTypeIcon } from './fileIconTheme';

@@ -1,6 +1,6 @@
 "use client"
 
-import { CHART_TYPES, NUMBER_FORMATS, acceptsSeries, type ChartDraft } from '@/features/explore/model/board'
+import { CHART_TYPES, NUMBER_FORMATS, acceptsSeries, type ChartDraft } from '../model/board'
 
 const CONTROL = 'mt-1 h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500'
 

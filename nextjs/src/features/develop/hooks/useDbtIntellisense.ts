@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { dbtApi, type DbtIntellisenseResponse } from '@/features/develop/api';
+import { dbtApi, type DbtIntellisenseResponse } from '../api';
 
 export interface UseDbtIntellisenseReturn {
     metadata: DbtIntellisenseResponse | null;

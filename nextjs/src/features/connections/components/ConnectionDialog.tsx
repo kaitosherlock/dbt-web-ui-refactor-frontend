@@ -5,7 +5,7 @@ import { Database, Globe, HardDrive, Layers, Loader2, Plus, Server, Trash2, Zap 
 import { Button } from "@/common/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/common/ui/dialog"
 import { Input } from "@/common/ui/input"
-import { createConnection, updateConnection } from "@/features/connections/api"
+import { createConnection, updateConnection } from "../api"
 
 type ConnectionType =
   | "postgresql" | "duckdb" | "dremio" | "oracle" | "spark" | "ducklake"

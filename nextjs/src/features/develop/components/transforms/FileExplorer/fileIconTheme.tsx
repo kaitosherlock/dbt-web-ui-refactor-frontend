@@ -23,7 +23,7 @@ import {
     ShieldCheck,
     Table2,
 } from 'lucide-react';
-import { type FileNode } from '@/features/develop/types';
+import { type FileNode } from '../../../types';
 
 interface FileIconTheme {
     icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;

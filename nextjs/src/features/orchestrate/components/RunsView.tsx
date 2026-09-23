@@ -13,7 +13,7 @@ import {
   Terminal,
 } from "lucide-react"
 import EmptyState from "@/common/components/EmptyState"
-import RunDetail from "@/features/orchestrate/components/RunDetail"
+import RunDetail from "./RunDetail"
 import RunStatusBadge from "@/entities/run/components/RunStatusBadge"
 import { formatDateTime, formatDuration, getFullCommand, shortHash } from "@/entities/run/model/formatters"
 import type { DbtRun, DbtRunStreamEvent, RunLogDashboardResponse } from "@/entities/run/types"

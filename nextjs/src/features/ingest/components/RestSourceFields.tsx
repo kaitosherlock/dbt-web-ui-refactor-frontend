@@ -4,7 +4,7 @@ import React, { useState } from "react"
 import { Loader2 } from "lucide-react"
 import { Button } from "@/common/ui/button"
 import { Input } from "@/common/ui/input"
-import { probeRestEndpoint, type RestProbeResult } from "@/features/ingest/api"
+import { probeRestEndpoint, type RestProbeResult } from "../api"
 
 export interface RestResource {
   name: string

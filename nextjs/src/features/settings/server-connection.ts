@@ -1,4 +1,4 @@
-import { findProviderPreset, type ProviderAuth } from "@/features/settings/model/ai-provider-definitions"
+import { findProviderPreset, type ProviderAuth } from "./model/ai-provider-definitions"
 
 export interface ProviderConnectionConfig {
   route: string
