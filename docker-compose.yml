@@ -1,0 +1,329 @@
+name: dbt-craft
+
+# Ports are bound to loopback. Put a TLS reverse proxy in front for anything
+# network-accessible, and see docker-compose.production.yml.
+
+x-auth-env: &auth-env
+  AUTH_DISABLED: ${AUTH_DISABLED:-false}
+  OIDC_ISSUER: ${OIDC_ISSUER:-}
+  OIDC_AUDIENCE: ${OIDC_AUDIENCE:-dbt-craft}
+
+x-shared-env: &shared-env
+  DATABASE_URL: postgresql://${POSTGRES_USER:-dbtcraft}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dbtcraft}
+  STORAGE_DIR: /data/storage
+  APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-}
+
+# DuckDB engine resources. DuckDB is the query engine: dbt-duckdb runs it, and
+# DuckLake is read through it. Each dbt run is a separate process with its own
+# instance, so an unset memory_limit means every one of them claims ~80% of the
+# box and the kernel kills a run instead of DuckDB spilling to disk.
+x-engine-env: &engine-env
+  # Empty derives a per-run share of this container's memory (see
+  # dbt-runner/app/core/duckdb_resources.py). Set e.g. 24GB to pin it.
+  DUCKDB_MEMORY_LIMIT: ${DUCKDB_MEMORY_LIMIT:-}
+  # 0 lets DuckDB use every core. It multiplies with `threads` in profiles.yml,
+  # which is dbt's model concurrency.
+  DUCKDB_THREADS: ${DUCKDB_THREADS:-0}
+  # Spill lives on the storage volume, not next to the project's .duckdb file:
+  # the project volume is not the one sized for data.
+  DUCKDB_TEMP_DIR: ${DUCKDB_TEMP_DIR:-/data/storage/duckdb-tmp}
+  DUCKDB_MAX_TEMP_DIRECTORY_SIZE: ${DUCKDB_MAX_TEMP_DIRECTORY_SIZE:-}
+  # false trades row order for a large drop in peak memory on big scans. Unset
+  # keeps DuckDB's default, because changing it reorders model output.
+  DUCKDB_PRESERVE_INSERTION_ORDER: ${DUCKDB_PRESERVE_INSERTION_ORDER:-}
+
+# Ingest / DuckLake lakehouse. The catalog defaults to the application database
+# under a per-project metadata schema; point LAKE_CATALOG_URL at its own database
+# to keep it separate. Data files live on the shared storage volume.
+x-ingest-env: &ingest-env
+  LAKE_CATALOG_URL: ${LAKE_CATALOG_URL:-}
+  LAKE_DATA_DIR: ${LAKE_DATA_DIR:-/data/storage/lake}
+  # 0 keeps ingested rows out of the catalog database. Raising it puts data
+  # inside Postgres and blocks the metadata-only path to Iceberg.
+  LAKE_INLINE_ROW_LIMIT: ${LAKE_INLINE_ROW_LIMIT:-0}
+  # Mount points an *external* lakehouse may keep its Parquet under, comma
+  # separated. Empty means only object storage (s3://, gs://, az://) is accepted:
+  # the path is typed by a user and dbt-runner can write anywhere its uid
+  # reaches. Paths inside LAKE_DATA_DIR are refused either way - that space
+  # belongs to lakehouses created here.
+  LAKE_EXTERNAL_DATA_ROOTS: ${LAKE_EXTERNAL_DATA_ROOTS:-}
+  # On-premise warehouses usually sit on a private network, so this must be
+  # turned on for them. The deployment's own Postgres and Redis stay blocked.
+  INGEST_ALLOW_PRIVATE_HOSTS: ${INGEST_ALLOW_PRIVATE_HOSTS:-false}
+  INGEST_SUBPROCESS_TIMEOUT: ${INGEST_SUBPROCESS_TIMEOUT:-3600}
+  INGEST_RUN_LOG_MAX_CHARS: ${INGEST_RUN_LOG_MAX_CHARS:-262144}
+  # Directories a *filesystem* ingest source may read CSV/JSONL/Parquet from,
+  # comma separated. Empty turns that source type off: dbt-runner can read
+  # anywhere its uid reaches, so an unfenced path would expose every project's
+  # files and the storage volume to whoever can create a source. Mount the drop
+  # directory into dbt-runner and name it here.
+  INGEST_FILE_ROOTS: ${INGEST_FILE_ROOTS:-}
+  # Publishing lake marts as Iceberg, for engines that cannot read DuckLake.
+  # The catalog falls back to LAKE_CATALOG_URL then DATABASE_URL. The warehouse
+  # must stay outside LAKE_DATA_DIR - the lake's orphan cleanup scans that tree.
+  ICEBERG_CATALOG_URL: ${ICEBERG_CATALOG_URL:-}
+  ICEBERG_WAREHOUSE_DIR: ${ICEBERG_WAREHOUSE_DIR:-/data/storage/iceberg}
+
+# Scheduler: cron for dbt runs, plus the housekeeping nothing else owns.
+# Leadership is a Redis key, so this is safe with several runner workers or
+# replicas - exactly one of them fires each schedule.
+x-scheduler-env: &scheduler-env
+  SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-true}
+  SCHEDULER_TICK_SECONDS: ${SCHEDULER_TICK_SECONDS:-30}
+  # A schedule due longer ago than this is skipped rather than run, so a long
+  # outage does not fire the whole backlog at once.
+  SCHEDULER_MISFIRE_GRACE_SECONDS: ${SCHEDULER_MISFIRE_GRACE_SECONDS:-3600}
+  WEBHOOK_TIMEOUT_SECONDS: ${WEBHOOK_TIMEOUT_SECONDS:-10}
+  # Run rows carry full log text, so history is the fastest growing table here.
+  # 0 keeps everything, forever.
+  RUN_HISTORY_RETENTION_DAYS: ${RUN_HISTORY_RETENTION_DAYS:-90}
+  MAINTENANCE_INTERVAL_HOURS: ${MAINTENANCE_INTERVAL_HOURS:-24}
+  # DuckLake keeps every snapshot and dbt leaves __dbt_backup tables behind;
+  # without expiry the storage volume only grows. 0 disables lake maintenance.
+  LAKE_SNAPSHOT_RETENTION_DAYS: ${LAKE_SNAPSHOT_RETENTION_DAYS:-7}
+
+# The dbt assistant. A harness session is a long-lived Node process holding a
+# model context, so sessions are capped and idle ones are reclaimed - the same
+# reason dbt-runner reclaims warm worker pools. Raising the cap costs memory in
+# the dsh-agent container only; dbt execution still goes through dbt-runner and
+# its own run semaphore.
+x-agent-env: &agent-env
+  AGENT_MAX_SESSIONS: ${AGENT_MAX_SESSIONS:-4}
+  AGENT_IDLE_SECONDS: ${AGENT_IDLE_SECONDS:-900}
+  AGENT_PROMPT_TIMEOUT: ${AGENT_PROMPT_TIMEOUT:-600}
+  # How long a starting session waits for its dbt tools to be discovered before
+  # going ahead without them.
+  AGENT_MCP_READY_TIMEOUT: ${AGENT_MCP_READY_TIMEOUT:-30}
+  AGENT_PROVIDER: ${AGENT_PROVIDER:-deepseek-official}
+  AGENT_MODEL: ${AGENT_MODEL:-deepseek-v4-flash}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dbt-craft-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dbtcraft}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-dbtcraft}
+    # Published for host-side development (prisma migrate, psql). Loopback only.
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5434}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dbtcraft}"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [dbt-craft-network]
+
+  redis:
+    image: redis:7-alpine
+    container_name: dbt-craft-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    # Published for host-side development only. Loopback only.
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks: [dbt-craft-network]
+
+  # One-shot Prisma migration runner. Uses the frontend Dockerfile's "builder"
+  # stage, which has the prisma CLI, the schema, and node_modules. Applies
+  # migrations before the app starts and exits 0.
+  db-migrate:
+    build:
+      context: ./nextjs
+      dockerfile: Dockerfile
+      target: builder
+    command: npx prisma migrate deploy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-dbtcraft}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dbtcraft}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [dbt-craft-network]
+
+  # Dummy source database for trying out ingest. Not part of the application:
+  # it only starts with `--profile demo`, so a normal `docker compose up -d`
+  # never brings it up.
+  #
+  #   docker compose --profile demo up -d demo-source
+  #
+  # Then add a PostgreSQL connection in the UI with host `demo-source`, port
+  # 5432, database `crm`, user `ingest_reader`, password `demo_reader_pw`.
+  # Reaching it needs INGEST_ALLOW_PRIVATE_HOSTS=true, because a container
+  # address is a private one.
+  demo-source:
+    image: postgres:16-alpine
+    container_name: dbt-craft-demo-source
+    profiles: ["demo"]
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo_owner_pw
+      POSTGRES_DB: crm
+    volumes:
+      - ./demo/postgres-seed.sql:/docker-entrypoint-initdb.d/seed.sql:ro
+      - demo-source-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo -d crm"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [dbt-craft-network]
+
+  dbt-runner:
+    build:
+      context: ./dbt-runner
+      dockerfile: Dockerfile
+      args:
+        INSTALL_DBT_SPARK: ${INSTALL_DBT_SPARK:-false}
+    container_name: dbt-craft-runner
+    restart: unless-stopped
+    environment:
+      <<: [*shared-env, *auth-env, *engine-env, *ingest-env, *scheduler-env]
+      WORKSPACE_DIR: /tmp/dbt-projects
+      REDIS_URL: redis://redis:6379/0
+      # Each concurrent run is a DuckDB process holding its own memory share, so
+      # raising this shrinks every run. Three heavy runs already saturate one
+      # node's disk bandwidth; raise it only for many small projects.
+      MAX_CONCURRENT_DBT_RUNS: ${MAX_CONCURRENT_DBT_RUNS:-3}
+      # Ad-hoc console queries, capped separately so a console stays usable
+      # during a batch. Added to the run cap when the per-instance DuckDB memory
+      # limit is derived, so raising it shrinks every run and every query.
+      MAX_CONCURRENT_QUERIES: ${MAX_CONCURRENT_QUERIES:-2}
+      DBT_INLINE_QUERY_TIMEOUT: ${DBT_INLINE_QUERY_TIMEOUT:-300}
+      # A warm worker is a live dbt process holding its project's warehouse open,
+      # so pools are reclaimed rather than accumulating per project forever.
+      DBT_WARM_WORKER_MAX_PROJECTS: ${DBT_WARM_WORKER_MAX_PROJECTS:-8}
+      DBT_WARM_WORKER_IDLE_SECONDS: ${DBT_WARM_WORKER_IDLE_SECONDS:-900}
+      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000","http://127.0.0.1:3000"]}
+      DBT_RUNNER_UVICORN_WORKERS: ${DBT_RUNNER_UVICORN_WORKERS:-1}
+      # dbt installs packages into the project dir by default. Projects authored
+      # for Airflow may point packages-install-path at an absolute Airflow path
+      # that does not exist here, so pin it to a project-relative dir.
+      DBT_PACKAGES_INSTALL_PATH: ${DBT_PACKAGES_INSTALL_PATH:-dbt_packages}
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
+    volumes:
+      - dbt-projects:/tmp/dbt-projects
+      - storage-data:/data/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    # 0 is unlimited, so the container reads the host's RAM and the derived
+    # per-run DuckDB share is a share of the whole machine. Set this on a box
+    # shared with anything else - the share is then derived from this ceiling.
+    mem_limit: ${DBT_RUNNER_MEM_LIMIT:-0}
+    networks: [dbt-craft-network]
+
+  dsh-agent:
+    build:
+      context: ./dsh-agent
+      dockerfile: Dockerfile
+    container_name: dbt-craft-agent
+    restart: unless-stopped
+    environment:
+      # Deliberately NOT *shared-env: this service never touches the database
+      # (authorization is delegated to dbt-runner) and never decrypts a stored
+      # credential, so it gets neither DATABASE_URL nor APP_ENCRYPTION_KEY.
+      <<: *agent-env
+      STORAGE_DIR: /data/storage
+      # NOT /tmp/dbt-projects as in dbt-runner: the harness sandbox grants the
+      # session's own directory plus /tmp, so projects under /tmp would be
+      # writable across projects. Same volume, different mount point.
+      WORKSPACE_DIR: /workspace/dbt-projects
+      DBT_RUNNER_URL: http://dbt-runner:8080
+      # The model endpoint. The harness also reads $DSH_HOME/.credentials.yaml,
+      # but an operator-supplied variable outranks it, which is what a container
+      # deployment wants.
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-}
+      AGENT_CORS_ORIGINS: ${AGENT_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      AUTH_DISABLED: ${AUTH_DISABLED:-false}
+    ports:
+      - "127.0.0.1:${AGENT_PORT:-8090}:8090"
+    volumes:
+      # The same project checkouts dbt-runner mounts: the agent edits the files
+      # the IDE is showing, and the file-watch SSE pushes its edits to the editor.
+      # Mounted outside /tmp - see WORKSPACE_DIR above.
+      - dbt-projects:/workspace/dbt-projects
+      # Session logs, under agent/<project_id>/sessions.
+      - storage-data:/data/storage
+    depends_on:
+      dbt-runner:
+        condition: service_healthy
+    # A session is roughly 150-200MB of Node plus its context. Left unset on a
+    # shared box the container can starve dbt-runner, whose DuckDB share is
+    # derived from ITS cgroup limit and cannot see this one.
+    mem_limit: ${AGENT_MEM_LIMIT:-0}
+    networks: [dbt-craft-network]
+
+  frontend:
+    build:
+      context: ./nextjs
+      dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* are inlined into the client bundle at build time, so
+        # they must be build args, not runtime env.
+        NEXT_PUBLIC_PRODUCT_NAME: ${NEXT_PUBLIC_PRODUCT_NAME:-dbt-craft}
+    container_name: dbt-craft-frontend
+    restart: unless-stopped
+    environment:
+      <<: [*shared-env, *auth-env]
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_PROVIDER_NAME: ${OIDC_PROVIDER_NAME:-SSO}
+      AUTH_SECRET: ${AUTH_SECRET}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      AUTH_TRUST_HOST: "true"
+      # Internal address of the backend. The browser never uses it — it calls
+      # the /api/dbt-runner proxy, which forwards here over the compose network.
+      DBT_RUNNER_URL: http://dbt-runner:8080
+      # Internal address of the assistant, like DBT_RUNNER_URL above. The
+      # browser never uses it - it calls the /api/agent proxy, which forwards
+      # here over the compose network. Set it empty to hide the panel.
+      AGENT_URL: ${AGENT_URL-http://dsh-agent:8090}
+      # Checking a model provider makes this container fetch a URL the user
+      # typed, so private addresses are refused unless a deployment opts in.
+      AI_PROVIDER_ALLOW_PRIVATE_HOSTS: ${AI_PROVIDER_ALLOW_PRIVATE_HOSTS:-false}
+      NEXT_PUBLIC_PRODUCT_NAME: ${NEXT_PUBLIC_PRODUCT_NAME:-dbt-craft}
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      dbt-runner:
+        condition: service_healthy
+      dsh-agent:
+        condition: service_healthy
+    volumes:
+      - storage-data:/data/storage
+    networks: [dbt-craft-network]
+
+volumes:
+  dbt-projects:
+  redis-data:
+  postgres-data:
+  storage-data:
+  # Only used by the `demo` profile.
+  demo-source-data:
+
+networks:
+  dbt-craft-network:
+    driver: bridge
