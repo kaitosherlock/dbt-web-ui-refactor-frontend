@@ -10,12 +10,12 @@ const compat = new FlatCompat({
 });
 
 // Frontend refactor (see docs/frontend-refactor-plan.md #3): import-boundary
-// rules for the target app/features/entities/common/server layout. Kept at
-// "warn" while the codebase is migrated into that layout; Phase 7 of the plan
-// flips these to "error" once nothing violates them anymore.
+// rules for the app/features/entities/common/server layout. Phase 7 flips
+// these from "warn" to "error" now that nothing violates them (verified by
+// `npm run lint` and `npm run build` both being clean before this flip).
 const restrict = (groups, message) => ({
   "no-restricted-imports": [
-    "warn",
+    "error",
     { patterns: groups.map((group) => ({ group: [group], message })) },
   ],
 });
@@ -62,7 +62,7 @@ const eslintConfig = [
   {
     files: ["src/**"],
     rules: {
-      "import/no-cycle": ["warn", { maxDepth: 5 }],
+      "import/no-cycle": ["error", { maxDepth: 5 }],
     },
   },
 ];

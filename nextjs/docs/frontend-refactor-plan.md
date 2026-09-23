@@ -3,6 +3,27 @@
 > Phạm vi: `nextjs/src/`. Không đổi URL, không đổi hành vi, không thêm màn hình mới.
 > Mục tiêu: nhiều người cùng code mà ít đụng nhau, và khi có lỗi thì biết ngay phải mở folder nào.
 
+## Trạng thái (cập nhật lần cuối sau khi thực hiện xong)
+
+- ✅ **Phase 0–4 xong và đã merge**: baseline, xoá cây `core/`/`components/` cũ, gộp
+  `common/api/client.ts`, biên `server/` (`server-only`), tách `lib/actions/data.ts` thành
+  `features/*/server.ts`, và toàn bộ `entities/` + `features/*` + `common/` như mô tả ở mục 2.
+  Mỗi bước đã chạy `tsc`/`lint`/`test:unit`/`test`/`build` xanh.
+- ✅ **Phase 7 xong**: 3 rule `no-restricted-imports` và `import/no-cycle` đã chuyển từ `warn`
+  sang `error` trong `eslint.config.mjs` — `npm run lint` và `npm run build` đều sạch dưới
+  `src/**`. `CODEOWNERS` đã có khung cho từng `features/*`, nhưng **chưa điền tên thật** — đó
+  vẫn là quyết định cần người, xem mục 9.
+- 🟡 **Phase 5 làm một phần, không đầy đủ**: `DevelopLayout.tsx` (2182 dòng, ~55 `useState`) đã
+  tách 3 hook (`usePanelLayout`, `useQueryPreviewState`, `useFileTreeState`, gộp 26 state) —
+  xem commit "Phase 5 (partial)". Còn khoảng 29 `useState` chưa tách (tab đang mở, git status,
+  dialog vòng đời project, dbt run args, env vars, settings dialog). Lý do dừng: phần còn lại
+  gắn chặt với hàng chục handler rải khắp file, và phiên làm việc này **không có backend chạy
+  thật** (Postgres có, nhưng dbt-runner/docker-compose thì không) để click-through theo đúng
+  checklist ở mục 6 — chỉ `tsc`/`lint`/`build` xanh là không đủ để tự tin sửa phần lõi IDE.
+  `SourceControlPanel.tsx` (1197 dòng) và `ConnectionDialog`/`SourceDialog` **chưa động tới**.
+- ⛔ **Phase 6 (TanStack Query) chưa làm** — đúng như plan đánh dấu "tuỳ chọn", và mục 9 chưa
+  có quyết định của bạn về việc có thêm dependency này không.
+
 ---
 
 ## 1. Hiện trạng (đo trên nhánh `main`, commit `8a628d7`)

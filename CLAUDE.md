@@ -6,7 +6,7 @@ SQLAlchemy 2 async (backend). Auth is generic OIDC via NextAuth v5, or
 `AUTH_DISABLED=true` for a single local user.
 
 ```
-nextjs/       # App Router: (app)=authenticated, (auth)=login; components/, lib/, prisma/
+nextjs/       # App Router: (app)=authenticated, (auth)=login; src/{app,features,entities,common,server}, prisma/
 dbt-runner/   # adapters/, ingest/, app/{routers,services,core}
 dsh-agent/    # one harness session per project over SSE; dbt_mcp/, profile/, plugins/
 docker-compose.yml   # postgres, redis, db-migrate, dbt-runner, frontend, dsh-agent
@@ -38,6 +38,33 @@ redirects in `next.config.ts`. `/settings` is reached from the avatar menu only.
 A new page needs an entry in `common/layout/navigation.ts` *and* the icon
 map in `Sidebar.tsx`. Per-project configuration belongs in
 `ProjectSettingsDialog.tsx`, not a new dialog.
+
+**Frontend layout** (`nextjs/src/`, full history in `docs/frontend-refactor-plan.md`).
+```
+app/        Routes only: thin pages, route handlers. Never Prisma directly —
+            route handlers call a feature's server.ts.
+features/   One per domain (home, projects, develop, git, connections, ingest,
+            lakehouse, orchestrate, explore, assistant, settings). Each has
+            whatever subset of components/, hooks/, model/, api.ts,
+            server.ts, types.ts, index.ts it actually needs.
+entities/   A thing more than one feature reads: project, connection, run,
+            file, target. types.ts + api.ts + (sometimes) a small component.
+            No screens here — that's a feature's job.
+common/     Knows nothing about dbt: ui/ (design system), components/,
+            layout/, api/ (the one HTTP client), lib/.
+server/     `import 'server-only'` first line, except auth/auth.config.ts and
+            auth/auth-constants.ts — middleware.ts (Edge runtime) imports
+            those, and the guard only helps in a Node/browser bundle.
+```
+Import rules (`eslint.config.mjs`, enforced as errors):
+`app` → `features`, `entities`, `common`, `server` (routes/server components
+only). `features` → `entities`, `common`, another feature only through its
+`index.ts` (`@/features/<name>`, never `@/features/<name>/<anything>`) —
+within your own feature use a relative import, not `@/features/<self>/...`.
+`entities` → `common` only. `common` → `common` only. `server` → `server`
+only. No import cycles (`import/no-cycle`). A feature's `server.ts` is
+exempt from the "no deep imports elsewhere" rule since nothing outside that
+feature should import it anyway — Prisma access is meant to stay there.
 
 **Query engine.** DuckDB is the only engine we run: `dbt-duckdb` executes models
 and reads the DuckLake lakehouse. Postgres/Oracle/Dremio/Spark are pass-throughs.
