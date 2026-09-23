@@ -1,11 +1,19 @@
 """
 Project management router for deletion/restoration operations with storage sync.
+
+Every endpoint here destroys or overwrites a project's files, so each one
+requires a user and that the user owns the project. Delete and restore also
+admit a project already in the trash: that is the state they act on.
 """
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.auth import require_user, resolve_user_id, verify_project_ownership
+from app.core.db import get_session
 
 from app.services.project import ProjectService
 from app.services.state import StateService
@@ -38,14 +46,32 @@ def _delete_state(project_id: str) -> bool:
         return False
 
 
+async def _require_owner(
+    session: AsyncSession, claims: dict, project_id: str, *, include_deleted: bool
+) -> None:
+    user_id = await resolve_user_id(session, claims.get("sub"), claims.get("email"))
+    await verify_project_ownership(
+        session, project_id, user_id, include_deleted=include_deleted
+    )
+
+
 @router.post("/delete")
-async def delete_project(request: ProjectDeleteRequest):
+async def delete_project(
+    request: ProjectDeleteRequest,
+    claims: dict = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
+):
     """
     Delete a project (soft or hard delete) with storage cleanup.
 
     - Soft delete: Marks project as deleted but keeps files for recovery
     - Hard delete: Permanently removes project and all storage files
     """
+    # A soft delete runs before the frontend marks the row deleted; a hard
+    # delete may purge a project that is already in the trash.
+    await _require_owner(
+        session, claims, request.project_id, include_deleted=request.hard_delete
+    )
     try:
         project_service = ProjectService()
         storage_service = get_storage_service()
@@ -110,12 +136,17 @@ async def delete_project(request: ProjectDeleteRequest):
 
 
 @router.post("/restore")
-async def restore_project(request: ProjectRestoreRequest):
+async def restore_project(
+    request: ProjectRestoreRequest,
+    claims: dict = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
+):
     """
     Restore a soft-deleted project.
 
     Clears the deleted_at flag from storage manifest and re-syncs files.
     """
+    await _require_owner(session, claims, request.project_id, include_deleted=True)
     try:
         project_service = ProjectService()
         storage_service = get_storage_service()
@@ -156,13 +187,18 @@ async def restore_project(request: ProjectRestoreRequest):
 
 
 @router.post("/sync/{project_id}")
-async def sync_project_from_storage(project_id: str):
+async def sync_project_from_storage(
+    project_id: str,
+    claims: dict = Depends(require_user),
+    session: AsyncSession = Depends(get_session),
+):
     """
     Explicitly sync project files from storage using timestamp-based comparison.
 
     Called by frontend when user opens a project or clicks Refresh button.
     Always checks all files and downloads if storage version is newer.
     """
+    await _require_owner(session, claims, project_id, include_deleted=False)
     try:
         project_service = ProjectService()
         storage_service = get_storage_service()

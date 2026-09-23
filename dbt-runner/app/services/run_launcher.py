@@ -18,7 +18,11 @@ from sqlalchemy import text
 
 from app.core.db import async_session
 from app.models.dbt import DbtCommand
-from app.services.command import append_server_state_flags, validate_dbt_argv
+from app.services.command import (
+    append_run_options,
+    append_server_state_flags,
+    validate_dbt_argv,
+)
 from app.services.dbt_service import DbtService
 from app.services.project import ProjectService
 from app.services.state import (
@@ -136,6 +140,7 @@ async def launch_dbt_run(
     command_name = dbt_command_name(request.command)
 
     project_path = await ProjectService().get_or_sync(request.project_id)
+    append_run_options(argv, request, project_path=project_path)
     resolved_state_path = resolve_request_state(
         StateService(), request, command_name, project_path
     )

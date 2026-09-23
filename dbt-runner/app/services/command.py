@@ -5,10 +5,15 @@ Uses Redis for cross-worker process tracking.
 """
 
 import asyncio
+import json
 import logging
 import os
+import re
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+import yaml
 
 from app.config import settings
 from app.core.redis_client import get_redis
@@ -117,6 +122,203 @@ def append_server_state_flags(
         argv.append("--defer")
     if favor_state:
         argv.append("--favor-state")
+    return argv
+
+
+# ---- Structured run options -------------------------------------------------
+#
+# The UI sends these as fields, never as argv text, and the server serialises
+# each one. Which subcommand accepts which flag follows dbt's own click
+# definitions (tests/test_dbt_run_options.py compares the tables against them),
+# so a field the command cannot take is refused here with a message instead of
+# by dbt's usage error.
+
+MAX_VARS_BYTES = 16 * 1024
+MAX_ARGS_BYTES = 16 * 1024
+
+VARS_COMMANDS = ALLOWED_DBT_SUBCOMMANDS
+EMPTY_COMMANDS = frozenset({"run", "build"})
+SAMPLE_COMMANDS = frozenset({"run", "build"})
+EVENT_TIME_COMMANDS = frozenset({"run", "build"})
+FULL_REFRESH_COMMANDS = frozenset({"run", "build", "seed"})
+SELECTOR_COMMANDS = frozenset(
+    {
+        "run",
+        "build",
+        "test",
+        "seed",
+        "snapshot",
+        "compile",
+        "show",
+        "ls",
+        "list",
+        "clone",
+        "docs generate",
+        "source freshness",
+    }
+)
+
+# dbt's SampleWindow.from_relative_string: "<int> <grain>" split on one space,
+# the grain one of dbt's BatchSize values with an optional plural "s".
+_SAMPLE_RE = re.compile(
+    r"^\s*([1-9][0-9]{0,5})\s+(hour|day|month|year)s?\s*$", re.IGNORECASE
+)
+SELECTOR_NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
+# click.DateTime's default format, which is what dbt parses --event-time-* with.
+_EVENT_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
+
+
+def _refuse(message: str) -> None:
+    raise DbtOperationError("command validation", message)
+
+
+def dbt_command_key(argv: List[str]) -> str:
+    """The subcommand as the option tables name it: `docs generate`, not `docs`."""
+    if len(argv) < 2:
+        return ""
+    if argv[1] in {"docs", "source"} and len(argv) > 2 and not argv[2].startswith("-"):
+        return f"{argv[1]} {argv[2]}"
+    return argv[1]
+
+
+def _has_flag(argv: List[str], flag: str) -> bool:
+    return any(token == flag or token.startswith(f"{flag}=") for token in argv[2:])
+
+
+def serialize_json_arg(value: Any, *, name: str, limit: int) -> str:
+    """One JSON argv value for --vars / --args, refused when unsafe or too big.
+
+    JSON is valid YAML, which is what dbt parses these flags as, and no shell
+    sits between argv and dbt, so the string needs no quoting.
+    """
+    if not isinstance(value, dict):
+        _refuse(f"{name} must be an object of name: value pairs")
+    try:
+        encoded = json.dumps(value, separators=(",", ":"), allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        _refuse(f"{name} must be JSON-serialisable: {exc}")
+    if len(encoded.encode()) > limit:
+        _refuse(f"{name} is larger than {limit // 1024} KiB")
+    return encoded
+
+
+def _event_time(value: Any, name: str) -> datetime:
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            _refuse(f"{name} must be an ISO 8601 datetime")
+    if not isinstance(value, datetime):
+        _refuse(f"{name} must be an ISO 8601 datetime")
+    if value.tzinfo is not None:
+        # dbt's flag carries no zone and treats the value as UTC.
+        value = value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+
+
+def project_selector_names(project_path: Path) -> Optional[List[str]]:
+    """Names defined in the project's selectors.yml, or None without one."""
+    path = project_path / "selectors.yml"
+    if not path.is_file():
+        return None
+    try:
+        document = yaml.safe_load(path.read_text()) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        _refuse(f"selectors.yml cannot be read: {exc}")
+    selectors = document.get("selectors") if isinstance(document, dict) else None
+    return [
+        str(item["name"])
+        for item in selectors or []
+        if isinstance(item, dict) and item.get("name")
+    ]
+
+
+def append_run_options(
+    argv: List[str], options: Any, *, project_path: Optional[Path] = None
+) -> List[str]:
+    """Append a request's structured options to already-validated argv.
+
+    `options` is any request model; a field it does not declare counts as
+    unset, so compile and preview requests (vars only) share this path.
+    Without `project_path` a selector name is shape-checked only.
+    """
+    command = dbt_command_key(argv)
+    top = argv[1] if len(argv) > 1 else ""
+
+    def option(name: str) -> Any:
+        return getattr(options, name, None)
+
+    def conflict(flag: str) -> None:
+        if _has_flag(argv, flag):
+            _refuse(f"'{flag}' was given both as a field and in the command; send it once")
+
+    def supported(field: str, commands: frozenset, value: Any) -> bool:
+        if not value:
+            return False
+        if command not in commands and top not in commands:
+            _refuse(f"'{field}' is not supported by dbt {command}")
+        return True
+
+    variables = option("vars")
+    if variables is not None:
+        conflict("--vars")
+        if supported("vars", VARS_COMMANDS, variables):
+            argv.extend(
+                ["--vars", serialize_json_arg(variables, name="vars", limit=MAX_VARS_BYTES)]
+            )
+
+    if supported("empty", EMPTY_COMMANDS, option("empty")):
+        conflict("--empty")
+        argv.append("--empty")
+
+    sample = option("sample")
+    if supported("sample", SAMPLE_COMMANDS, sample):
+        conflict("--sample")
+        match = _SAMPLE_RE.fullmatch(str(sample))
+        if not match:
+            _refuse(
+                "sample must look like '<count> <grain>', grain one of "
+                "hour, day, month, year (e.g. '3 days')"
+            )
+        argv.extend(["--sample", f"{int(match.group(1))} {match.group(2).lower()}"])
+
+    start, end = option("event_time_start"), option("event_time_end")
+    if supported("event_time_start/event_time_end", EVENT_TIME_COMMANDS, start or end):
+        if not (start and end):
+            _refuse("event_time_start and event_time_end must be given together")
+        conflict("--event-time-start")
+        conflict("--event-time-end")
+        start_at = _event_time(start, "event_time_start")
+        end_at = _event_time(end, "event_time_end")
+        if start_at >= end_at:
+            _refuse("event_time_start must be before event_time_end")
+        argv.extend(
+            [
+                "--event-time-start",
+                start_at.strftime(_EVENT_TIME_FORMAT),
+                "--event-time-end",
+                end_at.strftime(_EVENT_TIME_FORMAT),
+            ]
+        )
+
+    if supported("full_refresh", FULL_REFRESH_COMMANDS, option("full_refresh")):
+        # Older clients put --full-refresh in `flags`; saying it twice is harmless.
+        if not _has_flag(argv, "--full-refresh"):
+            argv.append("--full-refresh")
+
+    selector_name = option("selector_name")
+    if supported("selector_name", SELECTOR_COMMANDS, selector_name):
+        conflict("--selector")
+        if not SELECTOR_NAME_RE.fullmatch(str(selector_name)):
+            _refuse(f"invalid selector name '{selector_name}'")
+        if project_path is not None:
+            names = project_selector_names(project_path)
+            if names is None:
+                _refuse("the project has no selectors.yml, so no selector can be named")
+            if selector_name not in names:
+                _refuse(f"selectors.yml defines no selector named '{selector_name}'")
+        argv.extend(["--selector", selector_name])
+
     return argv
 
 

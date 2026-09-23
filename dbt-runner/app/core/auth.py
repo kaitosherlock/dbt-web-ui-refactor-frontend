@@ -216,20 +216,42 @@ async def resolve_user_id(
 
 
 async def verify_project_ownership(
-    session: AsyncSession, project_id: str, user_id: str
+    session: AsyncSession,
+    project_id: str,
+    user_id: str,
+    *,
+    include_deleted: bool = False,
 ) -> None:
     """Raise 404 if the project does not exist or is not owned by user_id.
 
     404 rather than 403 on purpose: a 403 confirms the project exists, which
-    tells one user about another user's projects.
+    tells one user about another user's projects. `include_deleted` admits a
+    project in the trash, for the endpoints that restore or purge one.
     """
+    deleted_clause = "" if include_deleted else "AND deleted_at IS NULL"
     result = await session.execute(
         text(
             "SELECT id FROM dbt_projects "
             "WHERE id = CAST(:pid AS uuid) AND created_by = CAST(:uid AS uuid) "
-            "AND deleted_at IS NULL"
+            f"{deleted_clause}"
         ),
         {"pid": project_id, "uid": user_id},
     )
     if not result.first():
         raise HTTPException(status_code=404, detail="Project not found")
+
+
+async def verify_connection_ownership(
+    session: AsyncSession, connection_id: str, user_id: str
+) -> None:
+    """Raise 404 if the connection does not exist or is not owned by user_id."""
+    result = await session.execute(
+        text(
+            "SELECT id FROM connections "
+            "WHERE id = CAST(:cid AS uuid) AND created_by = CAST(:uid AS uuid)"
+        ),
+        {"cid": connection_id, "uid": user_id},
+    )
+    if not result.first():
+        raise HTTPException(status_code=404, detail="Connection not found")
+

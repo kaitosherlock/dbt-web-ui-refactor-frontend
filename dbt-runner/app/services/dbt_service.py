@@ -34,16 +34,23 @@ from app.lineage import get_full_lineage
 from app.models.dbt import (
     CompileRequest,
     DbtCommand,
+    DbtDebugRequest,
     DbtInitRequest,
+    DbtLsRequest,
+    DbtRunOperationRequest,
     ExplainRequest,
     LineageRequest,
     PreviewRequest,
     QueryRequest,
 )
 from app.models.docs import DocsGenerateRequest, DocsServeRequest
+from app.services import dbt_cli
 from app.services.command import (
+    MAX_ARGS_BYTES,
     CommandService,
+    append_run_options,
     append_server_state_flags,
+    serialize_json_arg,
     validate_dbt_argv,
 )
 from app.services.dbt_environment import (
@@ -1022,6 +1029,7 @@ class DbtService:
         validate_dbt_argv(cmd)
 
         project_path = self.project.get_path_or_raise(request.project_id)
+        append_run_options(cmd, request, project_path=project_path)
         resolved_state_path = resolve_request_state(
             self.state, request, command_name, project_path, resolved_state_path
         )
@@ -1531,6 +1539,7 @@ class DbtService:
         if request.additional_args:
             cmd.extend(shlex.split(request.additional_args))
         validate_dbt_argv(cmd)
+        append_run_options(cmd, request)
 
         project_path = self.project.get_path_or_raise(request.project_id)
         logger.info(
@@ -1713,6 +1722,7 @@ class DbtService:
         if request.additional_args:
             cmd.extend(shlex.split(request.additional_args))
         validate_dbt_argv(cmd)
+        append_run_options(cmd, request)
 
         project_path = self.project.get_path_or_raise(request.project_id)
         profile_env: Dict[str, str] = {}
@@ -1841,6 +1851,7 @@ class DbtService:
                 additional_args=request.additional_args,
                 environment_variables=request.environment_variables,
                 target=request.target,
+                vars=request.vars,
             ),
             session=session,
             user_id=user_id,
@@ -2514,6 +2525,12 @@ class DbtService:
         """
         import shutil
 
+        if request.template not in dbt_cli.INIT_TEMPLATES:
+            raise DbtOperationError(
+                "init",
+                f"unknown template '{request.template}'; "
+                f"available: {', '.join(dbt_cli.INIT_TEMPLATES)}",
+            )
         project_path = self.project.ensure_exists(request.project_id)
         sanitized_name = self._sanitize_dbt_project_name(request.project_name)
 
@@ -2566,6 +2583,142 @@ class DbtService:
         except Exception as e:
             logger.error(f"dbt init error: {e}")
             return {"success": False, "message": str(e), "path": str(project_path)}
+
+    # ==================== LS / DEBUG / RUN-OPERATION ====================
+
+    async def _run_project_tool(
+        self,
+        cmd: List[str],
+        project_id: str,
+        *,
+        session: Optional[AsyncSession],
+        user_id: Optional[str],
+        request_environment: Optional[Dict[str, str]],
+        perf_label: str,
+        options: Any = None,
+    ) -> tuple[int, str, str, Path, Dict[str, str]]:
+        """Run a read-only dbt command the way compile does.
+
+        Same validation, profile regeneration, environment and compile lock as
+        compile_model; no History row, because nothing is built. Returns the
+        environment too, so the caller can redact what it contained.
+        """
+        validate_dbt_argv(cmd)
+        project_path = self.project.get_path_or_raise(project_id)
+        if options is not None:
+            append_run_options(cmd, options, project_path=project_path)
+        profile_env: Dict[str, str] = {}
+        if session:
+            profile_env = await self._regenerate_profiles_from_db(session, project_id, project_path)
+        cmd = [*cmd, "--profiles-dir", str(project_path)]
+        dbt_env = await self._build_dbt_environment(
+            session, project_id, user_id, request_environment, profile_env
+        )
+        async with AsyncFileLock.lock(project_id, "compile"):
+            returncode, stdout, stderr = await self._run_dbt_command(
+                cmd,
+                project_path,
+                project_id=project_id,
+                env=dbt_env,
+                perf_label=perf_label,
+            )
+        return returncode, stdout, stderr, project_path, dbt_env
+
+    async def list_resources(
+        self,
+        request: DbtLsRequest,
+        session: Optional[AsyncSession] = None,
+        user_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """`dbt ls --output json`, parsed into rows."""
+        cmd = ["dbt", "ls", "--output", "json"]
+        if request.select:
+            cmd.extend(["--select", request.select])
+        if request.exclude:
+            cmd.extend(["--exclude", request.exclude])
+        for resource_type in dbt_cli.validate_resource_types(request.resource_types):
+            cmd.extend(["--resource-type", resource_type])
+        if request.target:
+            validate_target_name(request.target)
+            cmd.extend(["--target", request.target])
+        returncode, stdout, stderr, project_path, dbt_env = await self._run_project_tool(
+            cmd,
+            request.project_id,
+            session=session,
+            user_id=user_id,
+            request_environment=request.environment_variables,
+            perf_label=f"ls project_id={request.project_id}",
+            options=request,
+        )
+        parsed = dbt_cli.parse_ls_output(stdout)
+        if returncode != 0:
+            return {
+                "success": False,
+                **parsed,
+                "error": dbt_cli.redact_output(
+                    stderr or stdout, secrets=dbt_env.values(), project_path=project_path
+                ),
+            }
+        return {"success": True, **parsed, "error": None}
+
+    async def debug_project(
+        self,
+        request: DbtDebugRequest,
+        session: Optional[AsyncSession] = None,
+        user_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """`dbt debug`: profile, project and connection checks, secrets removed."""
+        cmd = ["dbt", "debug"]
+        if request.target:
+            validate_target_name(request.target)
+            cmd.extend(["--target", request.target])
+        returncode, stdout, stderr, project_path, dbt_env = await self._run_project_tool(
+            cmd,
+            request.project_id,
+            session=session,
+            user_id=user_id,
+            request_environment=request.environment_variables,
+            perf_label=f"debug project_id={request.project_id}",
+        )
+        output = stdout + ("\n" + stderr if stderr else "")
+        return {
+            "success": returncode == 0,
+            "target": request.target,
+            "output": dbt_cli.redact_output(
+                output, secrets=dbt_env.values(), project_path=project_path
+            ),
+        }
+
+    async def run_operation(
+        self,
+        request: DbtRunOperationRequest,
+        session: Optional[AsyncSession] = None,
+        user_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """`dbt run-operation <macro> --args <json>` through run_command.
+
+        A macro can write to the warehouse, so this takes the run lock and the
+        global run slot and leaves a History row, like any other run.
+        """
+        project_path = self.project.get_path_or_raise(request.project_id)
+        macro = dbt_cli.require_macro(dbt_cli.load_manifest(project_path), request.macro)
+        flags = [macro]
+        if request.args:
+            flags.extend(
+                [
+                    "--args",
+                    serialize_json_arg(request.args, name="args", limit=MAX_ARGS_BYTES),
+                ]
+            )
+        command = DbtCommand(
+            project_id=request.project_id,
+            command="run-operation",
+            target=request.target,
+            flags=flags,
+            vars=request.vars,
+            environment_variables=request.environment_variables,
+        )
+        return await self.run_command(command, session=session, user_id=user_id)
 
     # ==================== DOCS OPERATIONS ====================
 

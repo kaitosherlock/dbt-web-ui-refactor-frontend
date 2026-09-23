@@ -33,3 +33,13 @@ Files: `app/services/state.py` (new), `app/models/dbt.py`, `app/routers/dbt.py`
 ## Frontend follow-ups collected so far
 - Env-var save route should reject the same names as `dbt_environment.py` at save time.
 - Phase 2 run_command enum (parse, ls, debug, run_operation, retry, clone).
+
+## MERGE BLOCKER (from Phase 4)
+Phase 4 added auth + ownership to /project/*, /process/*, /dbt/init, /dbt/docs/*,
+/connection/usage|test|schema. The Next.js proxy forwards browser headers only,
+so these plain-fetch callers send no token and will 401 under OIDC
+(AUTH_DISABLED=true is unaffected). Fix before merging:
+- nextjs/src/app/(app)/develop/page.tsx:48 (/project/delete)
+- nextjs/src/components/develop/DevelopLayout.tsx:958 (/process/cancel), :1474 (/project/sync), :1774, :1786 (/project/delete)
+- nextjs/src/app/api/dbt-docs/view/[projectId]/route.ts and .../static/[projectId]/[...filePath]/route.ts: forward session.accessToken
+Open, needs design: /sse/files/{project_id} has no auth (EventSource cannot send headers).

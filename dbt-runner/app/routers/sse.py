@@ -25,7 +25,8 @@ from app.core.file_lock import AsyncFileLock
 from app.core.global_semaphore import global_run_semaphore
 from app.core.redis_client import get_redis
 from app.exceptions import DbtOperationError
-from app.services.command import CommandService, validate_dbt_argv
+from app.models.dbt import DbtRunOptions
+from app.services.command import CommandService, append_run_options, validate_dbt_argv
 from app.services.dbt_environment import dbt_process_environment
 from app.services.dbt_service import DbtService
 from app.services.file_watcher import file_watcher_manager
@@ -132,7 +133,7 @@ async def file_watcher_sse(project_id: str) -> StreamingResponse:
     )
 
 
-class DbtCommandRequest(BaseModel):
+class DbtCommandRequest(DbtRunOptions):
     command: str
     selector: str | None = None
     flags: list[str] | None = None
@@ -364,6 +365,7 @@ async def dbt_sse(
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Project not found: {e}")
 
+    append_run_options(cmd, body, project_path=project_path)
     cmd.extend(["--profiles-dir", str(project_path)])
     dbt_env = await DbtService._build_dbt_environment(
         session, project_id, user_id, body.environment_variables, {}

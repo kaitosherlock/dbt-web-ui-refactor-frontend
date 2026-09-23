@@ -2,12 +2,47 @@
 Pydantic models for dbt operations.
 """
 
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
 
-class DbtCommand(BaseModel):
+VARS_DESCRIPTION = (
+    "dbt vars as an object; the server serialises it to one --vars JSON "
+    "argument. Refused together with a --vars in the command or flags."
+)
+
+
+class DbtRunOptions(BaseModel):
+    """Structured dbt flags the server serialises (app/services/command.py).
+
+    Kept out of argv text so the client never quotes JSON or dates, and so a
+    field the subcommand cannot take is refused with a message.
+    """
+
+    vars: Optional[Dict[str, Any]] = Field(None, description=VARS_DESCRIPTION)
+    empty: bool = Field(False, description="--empty (run, build)")
+    sample: Optional[str] = Field(
+        None,
+        max_length=32,
+        description="--sample time spec '<count> <grain>', e.g. '3 days' (run, build)",
+    )
+    event_time_start: Optional[datetime] = Field(
+        None, description="--event-time-start for microbatch models (run, build)"
+    )
+    event_time_end: Optional[datetime] = Field(
+        None, description="--event-time-end for microbatch models (run, build)"
+    )
+    full_refresh: bool = Field(False, description="--full-refresh (run, build, seed)")
+    selector_name: Optional[str] = Field(
+        None,
+        max_length=128,
+        description="--selector: a selector defined in the project's selectors.yml",
+    )
+
+
+class DbtCommand(DbtRunOptions):
     """Request to execute a dbt command."""
 
     project_id: str = Field(..., description="Project identifier")
@@ -69,6 +104,7 @@ class CompileRequest(BaseModel):
     target: Optional[str] = Field(
         None, description="profiles.yml output to use (--target). Null uses the project default."
     )
+    vars: Optional[Dict[str, Any]] = Field(None, description=VARS_DESCRIPTION)
 
 
 class PreviewRequest(BaseModel):
@@ -86,6 +122,7 @@ class PreviewRequest(BaseModel):
     target: Optional[str] = Field(
         None, description="profiles.yml output to use (--target). Null uses the project default."
     )
+    vars: Optional[Dict[str, Any]] = Field(None, description=VARS_DESCRIPTION)
 
 
 class ExplainRequest(BaseModel):
@@ -102,6 +139,7 @@ class ExplainRequest(BaseModel):
     target: Optional[str] = Field(
         None, description="profiles.yml output to use (--target). Null uses the project default."
     )
+    vars: Optional[Dict[str, Any]] = Field(None, description=VARS_DESCRIPTION)
 
 
 class QueryRequest(BaseModel):
@@ -130,6 +168,45 @@ class DbtInitRequest(BaseModel):
 
     project_id: str = Field(..., description="Project identifier")
     project_name: str = Field(..., description="Name for the new dbt project")
+    template: str = Field(
+        "empty",
+        description="Starter template from the server's allowlist "
+        "(GET /dbt/init/templates). 'empty' is plain `dbt init`.",
+    )
+
+
+class DbtLsRequest(DbtRunOptions):
+    """List project resources with `dbt ls --output json`."""
+
+    project_id: str
+    select: Optional[str] = Field(None, max_length=2000, description="--select")
+    exclude: Optional[str] = Field(None, max_length=2000, description="--exclude")
+    resource_types: Optional[List[str]] = Field(
+        None, description="--resource-type, repeated; values from dbt's list"
+    )
+    target: Optional[str] = None
+    environment_variables: Optional[Dict[str, str]] = None
+
+
+class DbtDebugRequest(BaseModel):
+    """Check a project's profile and warehouse connection with `dbt debug`."""
+
+    project_id: str
+    target: Optional[str] = None
+    environment_variables: Optional[Dict[str, str]] = None
+
+
+class DbtRunOperationRequest(BaseModel):
+    """Run one macro from the project's manifest with `dbt run-operation`."""
+
+    project_id: str
+    macro: str = Field(..., max_length=256, description="Macro name, optionally package.macro")
+    args: Optional[Dict[str, Any]] = Field(
+        None, description="Macro arguments; serialised to one --args JSON argument"
+    )
+    target: Optional[str] = None
+    vars: Optional[Dict[str, Any]] = Field(None, description=VARS_DESCRIPTION)
+    environment_variables: Optional[Dict[str, str]] = None
 
 
 class DbtIntellisenseColumn(BaseModel):
