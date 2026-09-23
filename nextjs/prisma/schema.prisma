@@ -1,0 +1,402 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  oidcSub   String   @unique @map("oidc_sub")
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  dremioSources           DremioSource[]
+  dbtProjects             DbtProject[]
+  connections             Connection[]
+  gitCredentials          GitCredential[]
+  dbtEnvironmentVariables DbtEnvironmentVariable[]
+  ingestSources           IngestSource[]
+  schedules               DbtSchedule[]
+  aiCredentials           AiCredential[]
+  aiProviders             AiProvider[]
+
+  @@map("users")
+}
+
+/// One model credential the user entered in Settings, keyed by the reference a
+/// provider route names (`apiKeyEnv`), which is how the harness resolves it.
+/// Encrypted with APP_ENCRYPTION_KEY like every other stored secret, and never
+/// returned to the browser: reads report only whether one exists.
+model AiCredential {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  /// Credential reference, e.g. DEEPSEEK_API_KEY or OPENAI_API_KEY.
+  credentialName  String   @default("DEEPSEEK_API_KEY") @map("credential_name") @db.Text
+  provider        String   @default("deepseek-official") @db.Text
+  apiKeyEncrypted String   @map("api_key_encrypted") @db.Text
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, credentialName])
+  @@map("ai_credentials")
+}
+
+/// A model provider route, in the shape the harness's own adapter takes
+/// (`llm-pi-ai`): a catalog route needs nothing but a credential reference,
+/// while a gateway pi-ai does not ship declares its protocol, endpoint and
+/// models. Kept separate from the credential exactly as the harness keeps
+/// settings separate from its credential store - no secret is stored here.
+model AiProvider {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  /// pi-ai route key: "openai", "anthropic", "deepseek", or a declared name.
+  route        String   @db.Text
+  label        String?  @db.Text
+  /// The credential this route resolves per request.
+  apiKeyEnv    String   @map("api_key_env") @db.Text
+  /// Wire protocol; required only for a route pi-ai ships no catalog for.
+  api          String?  @db.Text
+  baseUrl      String?  @map("base_url") @db.Text
+  /// [{ id, name?, contextWindow?, maxTokens? }]. Replaces the route's catalog.
+  models       Json?    @db.JsonB
+  defaultModel String?  @map("default_model") @db.Text
+  isDefault    Boolean  @default(false) @map("is_default")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, route])
+  @@map("ai_providers")
+}
+
+model DremioSource {
+  id              String       @id @default(uuid()) @db.Uuid
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime     @updatedAt @map("updated_at") @db.Timestamptz()
+  name            String       @db.Text
+  host            String       @db.Text
+  port            Int
+  username        String       @db.Text
+  tokenEncrypted  String       @map("token_encrypted") @db.Text
+  catalog         String       @default("") @db.Text
+  arrowFlightPort Int          @default(32010) @map("arrow_flight_port")
+  createdBy       String       @map("created_by") @db.Uuid
+  user            User         @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  dbtProjects     DbtProject[] @relation("DremioSourceProjects")
+
+  @@unique([name, createdBy])
+  @@map("dremio_sources")
+}
+
+model DbtProject {
+  id                     String                   @id @default(uuid()) @db.Uuid
+  createdAt              DateTime                 @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt              DateTime                 @updatedAt @map("updated_at") @db.Timestamptz()
+  name                   String                   @db.Text
+  description            String?                  @db.Text
+  gitUrl                 String?                  @map("git_url") @db.Text
+  gitBranch              String?                  @default("main") @map("git_branch") @db.Text
+  gitProjectSubdirectory String?                  @default("") @map("git_project_subdirectory") @db.Text
+  stagingDir             String?                  @map("staging_dir") @db.Text
+  martsDir               String?                  @map("marts_dir") @db.Text
+  syncStatus             String?                  @default("not_synced") @map("sync_status") @db.Text
+  dremioSourceId         String?                  @map("dremio_source_id") @db.Uuid
+  connectionId           String?                  @map("connection_id") @db.Uuid
+  /// The DuckLake catalog this project reads and writes, if any. Separate from
+  /// connectionId because a lake is attached next to the warehouse rather than
+  /// replacing it, and because several projects may share one lake.
+  lakehouseConnectionId  String?                  @map("lakehouse_connection_id") @db.Uuid
+  deletedAt              DateTime?                @map("deleted_at") @db.Timestamptz()
+  createdBy              String                   @map("created_by") @db.Uuid
+  user                   User                     @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  dremioSource           DremioSource?            @relation("DremioSourceProjects", fields: [dremioSourceId], references: [id], onDelete: SetNull)
+  connection             Connection?              @relation("ProjectWarehouse", fields: [connectionId], references: [id], onDelete: SetNull)
+  lakehouse              Connection?              @relation("ProjectLakehouse", fields: [lakehouseConnectionId], references: [id], onDelete: SetNull)
+  runs                   DbtRun[]
+  ingestSources          IngestSource[]
+  ingestRuns             IngestRun[]
+  schedules              DbtSchedule[]
+  targets                ProjectTarget[]
+  gitCredentials         GitCredential[]
+  environmentVariables   DbtEnvironmentVariable[]
+
+  @@map("dbt_projects")
+}
+
+model GitCredential {
+  id             String     @id @default(uuid()) @db.Uuid
+  projectId      String     @map("project_id") @db.Uuid
+  owner          String     @db.Uuid
+  remoteUrl      String     @map("remote_url") @db.Text
+  username       String     @db.Text
+  tokenEncrypted String     @map("token_encrypted") @db.Text
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz()
+  project        DbtProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user           User       @relation(fields: [owner], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, owner, remoteUrl])
+  @@index([owner, projectId])
+  @@map("git_credentials")
+}
+
+model DbtEnvironmentVariable {
+  id             String     @id @default(uuid()) @db.Uuid
+  projectId      String     @map("project_id") @db.Uuid
+  owner          String     @db.Uuid
+  name           String     @db.Text
+  valueEncrypted String     @map("value_encrypted") @db.Text
+  type           String     @default("text") @db.Text
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz()
+  project        DbtProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user           User       @relation(fields: [owner], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, owner, name])
+  @@index([owner, projectId])
+  @@map("dbt_environment_variables")
+}
+
+enum RunCommand {
+  run
+  test
+  build
+  compile
+  docs
+  deps
+  clean
+  seed
+  snapshot
+  source_freshness
+
+  @@map("run_command")
+}
+
+model DbtRun {
+  id            String           @id @default(uuid()) @db.Uuid
+  projectId     String           @map("project_id") @db.Uuid
+  command       RunCommand       @default(run)
+  selector      String?          @db.Text
+  status        String           @default("pending") @db.Text
+  startedAt     DateTime?        @map("started_at") @db.Timestamptz()
+  completedAt   DateTime?        @map("completed_at") @db.Timestamptz()
+  durationMs    BigInt?          @map("duration_ms")
+  modelsTotal   Int?             @default(0) @map("models_total")
+  modelsSuccess Int?             @default(0) @map("models_success")
+  modelsError   Int?             @default(0) @map("models_error")
+  logs          String?          @db.Text
+  errorMessage  String?          @map("error_message") @db.Text
+  results       Json?            @db.JsonB
+  gitCommit     String?          @map("git_commit") @db.VarChar(40)
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz()
+  project       DbtProject       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  artifacts     DbtRunArtifact[]
+
+  @@index([projectId, createdAt])
+  @@map("dbt_runs")
+}
+
+model DbtRunArtifact {
+  id            String   @id @default(uuid()) @db.Uuid
+  runId         String   @map("run_id") @db.Uuid
+  uniqueId      String   @map("unique_id") @db.Text
+  status        String   @db.Text
+  executionTime Float?   @map("execution_time")
+  compiledCode  String?  @map("compiled_code") @db.Text
+  error         String?  @db.Text
+  timing        Json?    @db.JsonB
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  run           DbtRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@map("dbt_run_artifacts")
+}
+
+enum IngestSourceType {
+  sql_database
+  rest_api
+  filesystem
+
+  @@map("ingest_source_type")
+}
+
+enum IngestDestination {
+  connection
+  ducklake
+
+  @@map("ingest_destination")
+}
+
+/// One ingest job: which Connection to read, which tables, and where to write.
+/// Holds no credentials - sourceConnection owns them, so a warehouse password
+/// still lives in exactly one table.
+model IngestSource {
+  id                 String            @id @default(uuid()) @db.Uuid
+  projectId          String            @map("project_id") @db.Uuid
+  /// Null for a source that carries no credential: a filesystem path, or a
+  /// public API.
+  sourceConnectionId String?           @map("source_connection_id") @db.Uuid
+  name               String            @db.Text
+  sourceType         IngestSourceType  @default(sql_database) @map("source_type")
+  destination        IngestDestination @default(ducklake)
+  /// Target schema in the destination. Validated against ^[a-z][a-z0-9_]{0,39}$
+  /// before it reaches SQL.
+  dataset            String            @db.Text
+  tables             Json              @db.JsonB
+  /// Per-source-type configuration that has no column of its own: a filesystem
+  /// glob, or a REST resource list. `sql_database` uses `tables` instead.
+  sourceConfig       Json?             @map("source_config") @db.JsonB
+  /// Column dlt tracks to load only new rows. Without one, every load reads the
+  /// whole source table - `append` then duplicates and `merge` only dedupes at
+  /// the destination.
+  cursorField        String?           @map("cursor_field") @db.Text
+  /// Lower bound for the first load, so a first run need not read all history.
+  cursorInitialValue String?           @map("cursor_initial_value") @db.Text
+  writeDisposition   String            @default("append") @map("write_disposition") @db.Text
+  /// Required for writeDisposition = merge.
+  primaryKey         Json?             @map("primary_key") @db.JsonB
+  /// DuckLake partition terms applied to every table this source writes: a
+  /// column name, or year/month/day/hour(column). Without one, a filter on a
+  /// date scans every Parquet file in the table. Lakehouse destination only.
+  partitionBy        Json?             @map("partition_by") @db.JsonB
+  isActive           Boolean           @default(true) @map("is_active")
+  createdBy          String            @map("created_by") @db.Uuid
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz()
+  project            DbtProject        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceConnection   Connection?       @relation(fields: [sourceConnectionId], references: [id], onDelete: Restrict)
+  user               User              @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  runs               IngestRun[]
+
+  @@unique([projectId, name])
+  @@index([projectId])
+  @@map("ingest_sources")
+}
+
+/// `ducklake` is not a warehouse: dbt never runs against it. It is a DuckLake
+/// catalog a project attaches *alongside* its warehouse, which is why it is
+/// reached through DbtProject.lakehouseConnectionId and never through
+/// DbtProject.connectionId.
+enum ConnectionType {
+  postgresql
+  duckdb
+  dremio
+  oracle
+  spark
+  ducklake
+  /// Read-only ingest sources. Neither has a dbt adapter - dbt never runs
+  /// against them, in the same way it never runs against `ducklake`.
+  mysql
+  rest
+
+  @@map("connection_type")
+}
+
+model Connection {
+  id                String          @id @default(uuid()) @db.Uuid
+  name              String          @db.Text
+  connectionType    ConnectionType  @map("connection_type")
+  host              String          @db.Text
+  port              Int
+  database          String          @db.Text
+  username          String          @db.Text
+  passwordEncrypted String?         @map("password_encrypted") @db.Text
+  sslMode           String?         @default("prefer") @map("ssl_mode") @db.Text
+  extraConfig       Json?           @map("extra_config") @db.JsonB
+  isActive          Boolean         @default(true) @map("is_active")
+  createdBy         String          @map("created_by") @db.Uuid
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz()
+  user              User            @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  projects          DbtProject[]    @relation("ProjectWarehouse")
+  lakehouseProjects DbtProject[]    @relation("ProjectLakehouse")
+  ingestSources     IngestSource[]
+  projectTargets    ProjectTarget[]
+
+  @@map("connections")
+}
+
+/// A named dbt target for one project: which Connection that target runs against.
+/// The project's own connectionId is always target `dev` and needs no row here,
+/// so every existing project keeps one working target with no data migration.
+model ProjectTarget {
+  id           String     @id @default(uuid()) @db.Uuid
+  projectId    String     @map("project_id") @db.Uuid
+  /// Rendered into profiles.yml as an output name, so it is validated against
+  /// ^[a-z][a-z0-9_]{0,29}$ before it is written. `dev` is reserved.
+  name         String     @db.Text
+  connectionId String     @map("connection_id") @db.Uuid
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz()
+  project      DbtProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  connection   Connection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+
+  @@unique([projectId, name])
+  @@index([projectId])
+  @@map("project_targets")
+}
+
+/// One cron entry: run `command` against `project` on a schedule.
+/// Cron is evaluated in UTC - a per-schedule timezone is a column and a
+/// croniter argument away, but nothing here needs one yet.
+model DbtSchedule {
+  id         String     @id @default(uuid()) @db.Uuid
+  projectId  String     @map("project_id") @db.Uuid
+  name       String     @db.Text
+  command    RunCommand @default(run)
+  selector   String?    @db.Text
+  /// dbt --target. Null means the project's default target.
+  target     String?    @db.Text
+  /// 5-field cron expression, UTC.
+  cron       String     @db.Text
+  isActive   Boolean    @default(true) @map("is_active")
+  /// POSTed a JSON summary when a scheduled run fails. Slack, Teams and Discord
+  /// incoming webhooks all accept it. Validated through host_guard before use:
+  /// a user-supplied URL the server fetches is an SSRF hole otherwise.
+  webhookUrl String?    @map("webhook_url") @db.Text
+  /// Lake schema published as Iceberg after a successful run, so engines that
+  /// cannot read DuckLake see the fresh marts. Null disables it. Validated
+  /// against ^[A-Za-z_][A-Za-z0-9_$]{0,62}$ - it becomes a SQL identifier.
+  publishSchema String? @map("publish_schema") @db.Text
+  lastRunAt  DateTime?  @map("last_run_at") @db.Timestamptz()
+  lastRunId  String?    @map("last_run_id") @db.Uuid
+  lastStatus String?    @map("last_status") @db.Text
+  nextRunAt  DateTime?  @map("next_run_at") @db.Timestamptz()
+  createdBy  String     @map("created_by") @db.Uuid
+  createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt  DateTime   @updatedAt @map("updated_at") @db.Timestamptz()
+  project    DbtProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, name])
+  @@index([isActive, nextRunAt])
+  @@map("dbt_schedules")
+}
+
+/// History for one ingest load. Same shape as DbtRun so the two run lists read
+/// alike; logs are capped by the writer, not by the column.
+model IngestRun {
+  id           String       @id @default(uuid()) @db.Uuid
+  sourceId     String       @map("source_id") @db.Uuid
+  projectId    String       @map("project_id") @db.Uuid
+  status       String       @default("running") @db.Text
+  startedAt    DateTime     @map("started_at") @db.Timestamptz()
+  completedAt  DateTime?    @map("completed_at") @db.Timestamptz()
+  durationMs   BigInt?      @map("duration_ms")
+  rowsLoaded   Int?         @map("rows_loaded")
+  tables       Json?        @db.JsonB
+  logs         String?      @db.Text
+  errorMessage String?      @map("error_message") @db.Text
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz()
+  source       IngestSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  project      DbtProject   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId, createdAt])
+  @@index([projectId, createdAt])
+  @@map("ingest_runs")
+}
