@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { auth, signOut } from '@/lib/auth'
-import { AUTH_DISABLED } from '@/lib/auth-constants'
-import { discoverOidc } from '@/lib/oidc'
-import { publicOrigin } from '@/lib/origin'
+import { auth, signOut } from '@/server/auth/auth'
+import { AUTH_DISABLED } from '@/server/auth/auth-constants'
+import { discoverOidc } from '@/server/auth/oidc'
+import { publicOrigin } from '@/server/origin'
 
 /**
  * Sign out locally, then hand off to the IdP's RP-initiated logout so the

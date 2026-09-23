@@ -7,6 +7,12 @@ export function createSecurityHeaders(isProduction: boolean) {
       value: [
         "default-src 'self'",
         "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+        // Monaco spawns its language-service workers from a blob: URL (the
+        // bundler wraps `new Worker(new URL(...))` that way). Without an
+        // explicit worker-src the browser falls back to script-src, which has
+        // no blob:, blocks the worker, and Monaco silently degrades to running
+        // everything on the main thread while logging a CSP error per editor.
+        "worker-src 'self' blob:",
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' blob: data: https:",
         "font-src 'self' data:",

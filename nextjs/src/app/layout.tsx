@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { SessionProvider } from 'next-auth/react';
-import { ClientErrorReporter } from "@/components/observability/ClientErrorReporter";
-import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/branding";
+import { ClientErrorReporter } from "@/common/components/ClientErrorReporter";
+import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/common/lib/branding";
 
 export const metadata: Metadata = {
   title: PRODUCT_NAME,

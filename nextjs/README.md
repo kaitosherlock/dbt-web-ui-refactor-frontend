@@ -39,7 +39,7 @@ src/
 │   ├── api/         # route handlers, incl. the dbt-runner proxy
 │   ├── layout.tsx   # single root layout
 │   └── globals.css
-├── components-v2/   # UI: develop workspace, dashboard, connections, layout
+├── components/   # UI: develop workspace, dashboard, connections, layout
 ├── lib/             # API clients, hooks, auth config, server actions
 └── middleware.ts    # auth gating
 prisma/

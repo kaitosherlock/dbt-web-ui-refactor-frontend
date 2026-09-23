@@ -4,7 +4,7 @@
 > Các mục Orchestrate / Explore / Data / Settings không nằm trong tài liệu này.
 >
 > Mã nguồn tham chiếu:
-> `nextjs/src/app/(app)/develop/`, `nextjs/src/components-v2/develop/`,
+> `nextjs/src/app/(app)/develop/`, `nextjs/src/features/develop/`,
 > `dbt-runner/app/routers/{dbt,files,git,sse,project}.py`,
 > `dbt-runner/app/services/{dbt_service,file_service,git_service,project}.py`.
 

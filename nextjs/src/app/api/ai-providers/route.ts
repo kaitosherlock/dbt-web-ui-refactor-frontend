@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getCurrentUserId } from '@/lib/session'
+import { getCurrentUserId } from '@/server/session'
 import {
   CATALOG_ROUTES,
   PROTOCOLS,
@@ -7,7 +7,7 @@ import {
   deleteProvider,
   listProviders,
   upsertProvider,
-} from '@/lib/ai-providers'
+} from '@/features/settings/server'
 
 /**
  * The user's model providers for the dbt assistant.

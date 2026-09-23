@@ -4,7 +4,7 @@ import {
   loadDevelopSession,
   saveDevelopSession,
   type DevelopSessionState,
-} from "../src/lib/develop-session";
+} from "../src/features/develop/model/develop-session";
 
 const createSessionStorage = () => {
   const values = new Map<string, string>();

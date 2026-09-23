@@ -1,1 +1,1 @@
-export { default } from "@/components/develop/NewProjectForm"
+export { default } from "@/features/projects/components/NewProjectForm"

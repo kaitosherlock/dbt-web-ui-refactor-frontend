@@ -8,7 +8,7 @@ import {
     pathsForDrag,
     normalizeRelativePath,
     joinPath,
-} from '../src/components-v2/develop/transforms/FileExplorer/explorerUtils';
+} from '../src/features/develop/components/transforms/FileExplorer/explorerUtils';
 
 describe('parentOf', () => {
     it('returns parent folder', () => {

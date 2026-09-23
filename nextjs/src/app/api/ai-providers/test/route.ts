@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server"
 
-import { checkProviderConnection } from "@/lib/ai-provider-connection"
-import { assertUrlHostAllowed } from "@/lib/host-guard"
+import { checkProviderConnection } from "@/features/settings/server-connection"
+import { assertUrlHostAllowed } from "@/server/host-guard"
 import {
   defaultApiKeyEnv,
   readProviderCredentialForTest,
   validateProvider,
   type ProviderInput,
-} from "@/lib/ai-providers"
-import { getCurrentUserId } from "@/lib/session"
+} from "@/features/settings/server"
+import { getCurrentUserId } from "@/server/session"
 
 export async function POST(request: Request) {
   try {

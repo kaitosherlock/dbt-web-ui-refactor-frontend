@@ -1,8 +1,8 @@
 # 01 — Workspace: bố cục IDE
 
-> Tham chiếu: `nextjs/src/components-v2/develop/DevelopLayout.tsx`,
-> `transforms/{FileExplorer,EditorTabs,TerminalPanel,RightPanel}/`,
-> `workspace/CodeEditor.tsx`, `nextjs/src/lib/develop-session.ts`.
+> Tham chiếu: `nextjs/src/features/develop/components/DevelopLayout.tsx`,
+> `components/transforms/{FileExplorer,EditorTabs,TerminalPanel,RightPanel}/`,
+> `components/CodeEditor.tsx`, `nextjs/src/features/develop/model/develop-session.ts`.
 
 ## 1. Bố cục
 
@@ -178,7 +178,7 @@ Chi tiết nằm ở `dsh-agent/README.md`.
 
 ## 9. Lưu phiên làm việc
 
-`nextjs/src/lib/develop-session.ts`.
+`nextjs/src/features/develop/model/develop-session.ts`.
 
 - **`sessionStorage`**, khoá `dbt-craft:develop-session:{userId}:{projectId}` —
   lưu gần như toàn bộ state UI: tab đang mở và nội dung, file đang chọn, log terminal,

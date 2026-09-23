@@ -2,16 +2,16 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AlertCircle, Bot, Boxes, ExternalLink, FileText, Loader2, RefreshCw, Terminal, MoreHorizontal } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import EmptyState from "@/components/shared/EmptyState"
-import { dbtApi } from "@/lib/api"
-import { cn } from "@/lib/utils"
-import DashboardWorkspace, { type BoardAddition } from "@/components/explore/DashboardWorkspace"
-import SqlConsole from "@/components/explore/SqlConsole"
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
-import AgentPanel from "@/components/develop/agent/AgentPanel"
-import { useAgentAvailability } from "@/lib/hooks/useAgentAvailability"
-import { exploreAgentContext, exploreFileView, type ExploreWorkspaceState } from "@/lib/explore-agent"
+import { Button } from "@/common/ui/button"
+import EmptyState from "@/common/components/EmptyState"
+import { dbtApi } from "@/features/develop/api"
+import { cn } from "@/common/lib/utils"
+import DashboardWorkspace, { type BoardAddition } from "@/features/explore/components/DashboardWorkspace"
+import SqlConsole from "@/features/explore/components/SqlConsole"
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/common/ui/dropdown-menu"
+import AgentPanel from "@/features/assistant/components/AgentPanel"
+import { useAgentAvailability } from "@/features/assistant/hooks/useAgentAvailability"
+import { exploreAgentContext, exploreFileView, type ExploreWorkspaceState } from "@/features/assistant/model/explore-agent"
 
 type Project = {
   id: string

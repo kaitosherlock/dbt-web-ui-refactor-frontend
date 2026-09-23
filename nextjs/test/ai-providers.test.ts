@@ -7,7 +7,7 @@ import {
   resolveRoutes,
   upsertProvider,
   validateProvider,
-} from '@/lib/ai-providers'
+} from '@/features/settings/server'
 
 // crypto.ts reads this at call time. Set here rather than in .env.test so the
 // test is self-contained: it is exercising encryption, not a local setup.
@@ -176,7 +176,7 @@ describe('assistant model providers', () => {
     await prisma.aiCredential.create({
       data: {
         userId: USER_A, credentialName: 'DEEPSEEK_API_KEY', provider: 'deepseek-official',
-        apiKeyEncrypted: (await import('@/lib/crypto')).encryptSecret('sk-legacy'),
+        apiKeyEncrypted: (await import('@/server/crypto')).encryptSecret('sk-legacy'),
       },
     })
 

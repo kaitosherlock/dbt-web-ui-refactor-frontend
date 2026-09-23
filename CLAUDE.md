@@ -6,7 +6,7 @@ SQLAlchemy 2 async (backend). Auth is generic OIDC via NextAuth v5, or
 `AUTH_DISABLED=true` for a single local user.
 
 ```
-nextjs/       # App Router: (app)=authenticated, (auth)=login; components/, lib/, prisma/
+nextjs/       # App Router: (app)=authenticated, (auth)=login; src/{app,features,entities,common,server}, prisma/
 dbt-runner/   # adapters/, ingest/, app/{routers,services,core}
 dsh-agent/    # one harness session per project over SSE; dbt_mcp/, profile/, plugins/
 docker-compose.yml   # postgres, redis, db-migrate, dbt-runner, frontend, dsh-agent
@@ -26,7 +26,7 @@ docker compose --profile demo up -d demo-source   # dummy CRM Postgres for tryin
 ## Key decisions
 
 **Auth.** Endpoints are discovered from `{OIDC_ISSUER}/.well-known/...`
-(`src/lib/oidc.ts`) — never hardcode a provider URL. `User.id` is a Prisma UUID,
+(`src/server/auth/oidc.ts`) — never hardcode a provider URL. `User.id` is a Prisma UUID,
 not the OIDC `sub` (which lives in `User.oidcSub`). Frontend and dbt-runner
 verify JWTs independently. `AUTH_TRUST_HOST=true` behind a proxy. Middleware
 gates pages only; API routes do their own session check so they 401 instead of
@@ -35,9 +35,36 @@ redirecting.
 **Routing.** Five sidebar sections (`/`, `/develop`, `/orchestrate`, `/explore`,
 `/data`); sub-pages are tabs in the query string (`?tab=schedules`) with legacy
 redirects in `next.config.ts`. `/settings` is reached from the avatar menu only.
-A new page needs an entry in `components/layout/navigation.ts` *and* the icon
+A new page needs an entry in `common/layout/navigation.ts` *and* the icon
 map in `Sidebar.tsx`. Per-project configuration belongs in
 `ProjectSettingsDialog.tsx`, not a new dialog.
+
+**Frontend layout** (`nextjs/src/`, full history in `docs/frontend-refactor-plan.md`).
+```
+app/        Routes only: thin pages, route handlers. Never Prisma directly —
+            route handlers call a feature's server.ts.
+features/   One per domain (home, projects, develop, git, connections, ingest,
+            lakehouse, orchestrate, explore, assistant, settings). Each has
+            whatever subset of components/, hooks/, model/, api.ts,
+            server.ts, types.ts, index.ts it actually needs.
+entities/   A thing more than one feature reads: project, connection, run,
+            file, target. types.ts + api.ts + (sometimes) a small component.
+            No screens here — that's a feature's job.
+common/     Knows nothing about dbt: ui/ (design system), components/,
+            layout/, api/ (the one HTTP client), lib/.
+server/     `import 'server-only'` first line, except auth/auth.config.ts and
+            auth/auth-constants.ts — middleware.ts (Edge runtime) imports
+            those, and the guard only helps in a Node/browser bundle.
+```
+Import rules (`eslint.config.mjs`, enforced as errors):
+`app` → `features`, `entities`, `common`, `server` (routes/server components
+only). `features` → `entities`, `common`, another feature only through its
+`index.ts` (`@/features/<name>`, never `@/features/<name>/<anything>`) —
+within your own feature use a relative import, not `@/features/<self>/...`.
+`entities` → `common` only. `common` → `common` only. `server` → `server`
+only. No import cycles (`import/no-cycle`). A feature's `server.ts` is
+exempt from the "no deep imports elsewhere" rule since nothing outside that
+feature should import it anyway — Prisma access is meant to stay there.
 
 **Query engine.** DuckDB is the only engine we run: `dbt-duckdb` executes models
 and reads the DuckLake lakehouse. Postgres/Oracle/Dremio/Spark are pass-throughs.
@@ -140,7 +167,7 @@ without a Build button because `/charts/render` draws from rows the browser
 already holds (no warehouse round trip); `chartProblem` states the renderer's
 limits up front instead of failing on them. Add chart still inserts the *query*,
 never these rows, so the dashboard refreshes. Helpers and their tests:
-`boardSource` / `boardNeedsRender` / `chartProblem` in `src/lib/board.ts`.
+`boardSource` / `boardNeedsRender` / `chartProblem` in `src/features/explore/model/board.ts`.
 
 **Scheduling.** `app/services/scheduler.py` is one poll loop doing three jobs:
 fire due schedules, prune run history, run DuckLake maintenance. Leadership is a
@@ -211,6 +238,6 @@ Warm worker pools are reclaimed idle-first then LRU, never mid-job.
   no adapter on purpose, refused as a warehouse with a message.
 - Accept Python source for an ingest source — configuration is declarative only.
 - Skip a host guard on any endpoint that connects to a user-supplied host:
-  `app/core/host_guard.py` in dbt-runner, `src/lib/host-guard.ts` in the
+  `app/core/host_guard.py` in dbt-runner, `src/server/host-guard.ts` in the
   frontend (a provider's Base URL is fetched by the server too).
 - Give dsh-agent database access or let it shell out to dbt.
