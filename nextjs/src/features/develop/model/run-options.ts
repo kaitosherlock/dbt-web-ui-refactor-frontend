@@ -1,6 +1,6 @@
 /**
  * Pure helpers for dbt run options: validation, selectors parsing, and building
- * request payloads for dbt-runner (docs/codex/FRONTEND_SPEC.md § F2).
+ * request payloads for dbt-runner.
  *
  * All flags are sent as structured request fields, NEVER raw CLI text in the
  * command string (the backend refuses conflicting flags).

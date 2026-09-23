@@ -459,7 +459,7 @@ def build_adapter_config_from_connection_row(
     # Adding a warehouse means: an adapter in adapters/__init__.py, its dbt
     # plugin in pyproject.toml, and the type in CONNECTION_TYPES on the
     # frontend. A mapping here alone only produces failed runs. The full
-    # checklist is docs/codex/adding-an-adapter.md.
+    # checklist is docs/adding-an-adapter.md.
     raise ValueError(f"Unsupported connection_type: {conn_type}")
 
 

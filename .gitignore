@@ -58,3 +58,6 @@ codemap.md
 
 # Saved web page: 13 MB of third-party assets, kept locally only.
 docs/dbt_guide_ultimate/
+
+# pytest basetemp left by sandboxed test runs
+.pytest-tmp/
