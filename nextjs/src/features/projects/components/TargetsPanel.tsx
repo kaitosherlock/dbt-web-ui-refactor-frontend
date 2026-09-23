@@ -1,12 +1,13 @@
 "use client"
 
 import React, { useCallback, useEffect, useState } from "react"
-import { CheckCircle2, Loader2, Plus, ShieldCheck, Trash2, XCircle } from "lucide-react"
+import { Check, CheckCircle2, Loader2, Pencil, Plus, ShieldCheck, Trash2, X, XCircle } from "lucide-react"
 import { Button } from "@/common/ui/button"
 import { Input } from "@/common/ui/input"
 import {
   createProjectTarget,
   deleteProjectTarget,
+  deleteTargetState,
   getProjectTargets,
   updateProjectTarget,
   type ProjectTargetRow,
@@ -53,6 +54,8 @@ export default function TargetsPanel({
   const [connectionId, setConnectionId] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [editingTargetId, setEditingTargetId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState("")
   // One live result per target, keyed by name, filled by that row's own check.
   const [reachable, setReachable] = useState<Record<string, { ok: boolean; message?: string | null }>>({})
   const [checking, setChecking] = useState<string | null>(null)
@@ -165,14 +168,51 @@ export default function TargetsPanel({
     }
   }
 
-  async function removeTarget(id: string) {
+  async function removeTarget(target: ProjectTargetRow) {
     setBusy(true)
     setError(null)
     try {
-      await deleteProjectTarget(id)
+      await deleteProjectTarget(target.id)
+      try {
+        await deleteTargetState(projectId, target.name)
+      } catch (stateErr) {
+        console.warn("Failed to delete target state:", stateErr)
+      }
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove target")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleRenameTarget(target: ProjectTargetRow, nextName: string) {
+    const trimmed = nextName.trim()
+    if (!trimmed || trimmed === target.name) {
+      setEditingTargetId(null)
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      await updateProjectTarget({
+        id: target.id,
+        projectId,
+        name: trimmed,
+        connectionId: target.connectionId,
+      })
+      try {
+        await deleteTargetState(projectId, target.name)
+      } catch (err) {
+        console.warn("Failed to delete target state for renamed target:", err)
+      }
+      if (activeTarget === target.name) {
+        onSelectActiveTarget(trimmed)
+      }
+      setEditingTargetId(null)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to rename target")
     } finally {
       setBusy(false)
     }
@@ -229,7 +269,59 @@ export default function TargetsPanel({
               onChange={() => onSelectActiveTarget(target.name)}
               disabled={disabled}
             />
-            <span className="font-mono text-xs text-gray-900">{target.name}</span>
+            {editingTargetId === target.id ? (
+              <div className="flex items-center gap-1">
+                <Input
+                  value={editingName}
+                  onChange={(event) => setEditingName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault()
+                      void handleRenameTarget(target, editingName)
+                    } else if (event.key === "Escape") {
+                      setEditingTargetId(null)
+                    }
+                  }}
+                  className="h-7 w-28 text-xs font-mono"
+                  autoFocus
+                  disabled={busy}
+                />
+                <button
+                  type="button"
+                  disabled={busy || !editingName.trim()}
+                  onClick={() => void handleRenameTarget(target, editingName)}
+                  className="text-green-600 hover:text-green-800 disabled:opacity-50 p-1"
+                  title="Save rename"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setEditingTargetId(null)}
+                  className="text-gray-400 hover:text-gray-600 disabled:opacity-50 p-1"
+                  title="Cancel"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1">
+                <span className="font-mono text-xs text-gray-900">{target.name}</span>
+                <button
+                  type="button"
+                  disabled={disabled || busy}
+                  onClick={() => {
+                    setEditingTargetId(target.id)
+                    setEditingName(target.name)
+                  }}
+                  className="text-gray-400 hover:text-[#0078D4] disabled:opacity-50 p-0.5"
+                  title={`Rename target ${target.name}`}
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              </div>
+            )}
             <select
               aria-label={`Connection for target ${target.name}`}
               value={target.connectionId}
@@ -254,7 +346,7 @@ export default function TargetsPanel({
             <button
               type="button"
               disabled={busy}
-              onClick={() => removeTarget(target.id)}
+              onClick={() => removeTarget(target)}
               className="text-gray-400 hover:text-red-600 disabled:opacity-50"
               title={`Remove target ${target.name}`}
             >

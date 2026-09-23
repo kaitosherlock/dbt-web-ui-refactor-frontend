@@ -138,7 +138,13 @@ export function useDbtRunStream(options: UseDbtRunStreamOptions) {
         }
     }, [projectId]);
 
-    const sendCommand = useCallback((command: string, selector?: string, environmentVariables?: Record<string, string>, flags?: string[]): boolean => {
+    const sendCommand = useCallback((
+        command: string,
+        selector?: string,
+        environmentVariables?: Record<string, string>,
+        flags?: string[],
+        options?: Record<string, unknown>,
+    ): boolean => {
         const dbtRunnerUrl = getDbtRunnerUrl();
         const url = `${dbtRunnerUrl}/sse/dbt/${projectId}`;
 
@@ -168,7 +174,13 @@ export function useDbtRunStream(options: UseDbtRunStreamOptions) {
                 const response = await fetch(url, {
                     method: 'POST',
                     headers,
-                    body: JSON.stringify({ command, selector, flags, environment_variables: environmentVariables }),
+                    body: JSON.stringify({
+                        command,
+                        selector,
+                        flags,
+                        environment_variables: environmentVariables,
+                        ...options,
+                    }),
                     signal: controller.signal,
                 });
 

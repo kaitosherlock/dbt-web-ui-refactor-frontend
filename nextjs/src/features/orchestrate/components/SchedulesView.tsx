@@ -47,6 +47,12 @@ const COMMAND_LABELS: Record<string, string> = {
   docs: "dbt docs generate",
   deps: "dbt deps",
   clean: "dbt clean",
+  parse: "dbt parse",
+  ls: "dbt ls",
+  debug: "dbt debug",
+  run_operation: "dbt run-operation",
+  retry: "dbt retry",
+  clone: "dbt clone",
 }
 
 function formatWhen(iso: string | null): string {

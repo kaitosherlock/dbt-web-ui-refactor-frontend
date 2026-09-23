@@ -1,5 +1,14 @@
 export { default as RunStatusBadge } from './components/RunStatusBadge'
-export { formatDuration, formatDateTime, shortHash, getFullCommand } from './model/formatters'
+export { default as RunCommandIcon } from './components/RunCommandIcon'
+export {
+  formatDuration,
+  formatDateTime,
+  shortHash,
+  getFullCommand,
+  getCommandName,
+  COMMAND_LABELS,
+  formatCommandLabel,
+} from './model/formatters'
 export {
   parseDbtLogLine,
   parseDbtLogs,
