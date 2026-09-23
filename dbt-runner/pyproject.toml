@@ -22,10 +22,10 @@ dependencies = [
     "pydantic>=2.12.5",
     "pydantic-settings>=2.12.0",
     "python-multipart>=0.0.21",
-    "dbt-core==1.10.16",
-    "dbt-dremio==1.10.0",
-    "dbt-postgres==1.10.0",
-    "dbt-duckdb==1.10.0",
+    "dbt-core==1.10.23",
+    "dbt-dremio==1.10.1",
+    "dbt-postgres==1.10.2",
+    "dbt-duckdb==1.10.1",
     "dbt-charts==0.8.0",
     "dbt-oracle==1.10.0",
     "gitpython>=3.1.45",
@@ -78,7 +78,7 @@ test = [
     "pytest-mock>=3.15.0",
 ]
 spark = [
-    "dbt-spark[session,PyHive]==1.10.1",
+    "dbt-spark[session,PyHive]==1.10.3",
     "pandas>=2.2.0",
     "grpcio>=1.48.1",
     "grpcio-status>=1.48.1",
