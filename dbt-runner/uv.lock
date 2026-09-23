@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.11, <3.14"
 resolution-markers = [
     "python_full_version >= '3.12' and sys_platform == 'win32'",
@@ -610,7 +610,7 @@ wheels = [
 
 [[package]]
 name = "dbt-core"
-version = "1.10.16"
+version = "1.10.23"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "agate" },
@@ -636,14 +636,14 @@ dependencies = [
     { name = "sqlparse" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5b/6c/966d4022584d2f176f9067a353bcb66bc05889a05fdaa66c060a87077f41/dbt_core-1.10.16.tar.gz", hash = "sha256:e20c5a47d4d401add9d15ee0ddffe279595b356133f8770fa25465610ab273fa", size = 900269, upload-time = "2025-12-16T16:58:16.205Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0a/8d/27bba30052dd7c248be0b40389223d5b3d9dc6b06761d1297101197475a9/dbt_core-1.10.23.tar.gz", hash = "sha256:0781b9b887b20a66d439bd1ec33eae57db663c729825a19c11b7529766b0a5dd", size = 901971, upload-time = "2026-08-12T16:28:58.259Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/02/2f/9ae693a5e8dd76cca00d658982ad76d64c1eafb0425ea2dae0e67ec97447/dbt_core-1.10.16-py3-none-any.whl", hash = "sha256:5e4cb7505efa3623b37476a1d06175ce14be69fd82fc9a14d1bc57a9ca35b615", size = 986991, upload-time = "2025-12-16T16:58:14.414Z" },
+    { url = "https://files.pythonhosted.org/packages/45/1d/995c8d233f930ab562a8bd31920509079967d1068299b9b7d895ef76e5f0/dbt_core-1.10.23-py3-none-any.whl", hash = "sha256:bdce6698a2ee93be7375a8be481818849b2438c5f8dddb0b6b24e4cb58a94e36", size = 988329, upload-time = "2026-08-12T16:28:57.087Z" },
 ]
 
 [[package]]
 name = "dbt-dremio"
-version = "1.10.0"
+version = "1.10.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dbt-adapters" },
@@ -651,14 +651,14 @@ dependencies = [
     { name = "dbt-core" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a9/1c/6992b6fbe4a96145d663f5c6f8142d06fdbb062be1dff001068be41788a0/dbt_dremio-1.10.0.tar.gz", hash = "sha256:644f2eda724018319797dc21f87732e8cd3f04e569a8f6d08593f46c88fe22df", size = 43562, upload-time = "2025-10-28T11:51:13.031Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ff/b2/087f80b372dba335412bca6e4278f0739c0d2eeaf9baa11bacb356e2b797/dbt_dremio-1.10.1.tar.gz", hash = "sha256:6b0bc19dffe45984bee95217078579936f276630e3892c8816bba3efcbb0f22f", size = 43780, upload-time = "2026-06-09T15:25:09.532Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2e/1a/39519a08e68f9364cf0ba09436a51607985b8ecf3465c6ab20d1b921a0df/dbt_dremio-1.10.0-py3-none-any.whl", hash = "sha256:681a10d381f83464ea75e8388f1f5138904e820053c8a6cb2a49b8ad9091b92d", size = 78224, upload-time = "2025-10-28T11:51:11.667Z" },
+    { url = "https://files.pythonhosted.org/packages/02/d9/30e9b3bd696900e6425662640609b2671dc381630c06703d2d51ac2f86aa/dbt_dremio-1.10.1-py3-none-any.whl", hash = "sha256:4e7b66463da48e3a19fbb925664d86d8b7d85f6153b95e88b980a5af2032f43f", size = 78425, upload-time = "2026-06-09T15:25:08.319Z" },
 ]
 
 [[package]]
 name = "dbt-duckdb"
-version = "1.10.0"
+version = "1.10.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dbt-adapters" },
@@ -666,9 +666,9 @@ dependencies = [
     { name = "dbt-core" },
     { name = "duckdb" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d7/a3/1286f14a03b3475a5349139e200d6522eed4d6b41932245df6d9bf401eb8/dbt_duckdb-1.10.0.tar.gz", hash = "sha256:9da9603840f153a5713991553748ba89084930a83fe8a7936cd65b006b70c3ee", size = 139822, upload-time = "2025-11-05T15:08:59.679Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c5/d3/0f9f6a4de94e0f95dcfabbba5e8ef7670de695483345edd9e5b36e93d024/dbt_duckdb-1.10.1.tar.gz", hash = "sha256:5d6df1589d4ba21fe20ac08454a32763d3263798c9f5914280eabd1dc285cbc0", size = 145907, upload-time = "2026-02-17T17:29:04.283Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/91/32/62d2b3e98a6d76fe541e8299e60a35a75f1ee46b28bacf43a46fcc192713/dbt_duckdb-1.10.0-py3-none-any.whl", hash = "sha256:8bfc534d6e2eb732af5bda2e5681b70f5159e4adb52bdc8ef0dbe911c1314334", size = 82889, upload-time = "2025-11-05T15:08:57.963Z" },
+    { url = "https://files.pythonhosted.org/packages/c5/26/0ce2b1aeecdd1a18a9fac6f02d08f60c95944f036866f3fe37146298d4e4/dbt_duckdb-1.10.1-py3-none-any.whl", hash = "sha256:90658ecb367082786c5ea2ffbf9e35bb4116fa5ad1bc2f287c4dc1f3984bafa1", size = 85089, upload-time = "2026-02-17T17:29:03.117Z" },
 ]
 
 [[package]]
@@ -711,7 +711,7 @@ wheels = [
 
 [[package]]
 name = "dbt-postgres"
-version = "1.10.0"
+version = "1.10.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "agate" },
@@ -720,9 +720,9 @@ dependencies = [
     { name = "dbt-core" },
     { name = "psycopg2-binary" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/53/f2/6d101b917c9f4a6c09a15cc239dc360be5b1115e27d5bdac9c6c3bead5f1/dbt_postgres-1.10.0.tar.gz", hash = "sha256:74dc7e8b531ab785bca9d44f3d1ee9b38c4cbac967eafe7373242ed181eb0fa2", size = 160230, upload-time = "2025-12-22T20:02:44.149Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/72/61/4b609911d827b9cb8a4b9647579cc6de0e02684fb2d9dce18213c9733628/dbt_postgres-1.10.2.tar.gz", hash = "sha256:83b6b03572452d74bf3b60ef2578c7172d6e5ff4c285c876cd51aa9ed09be4c4", size = 157388, upload-time = "2026-06-24T06:48:13.777Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2c/70/4f8ab84353844e5c5b2961d18f8c3d171b539c2c0425f855c550d766c960/dbt_postgres-1.10.0-py3-none-any.whl", hash = "sha256:9bc9d07342edbc86c16e20b2ab02c211c30c09b03736f925d612d963cbbe4f94", size = 35520, upload-time = "2025-12-22T20:02:42.792Z" },
+    { url = "https://files.pythonhosted.org/packages/d6/3a/32a00d796492ffcaa022eda9decf1f7366bce210715087fd985415b2fd94/dbt_postgres-1.10.2-py3-none-any.whl", hash = "sha256:1367386caa99ca59f8228eae6d0e03f9537f9615f55a5ba5cc80a5b06aa6d32e", size = 35517, upload-time = "2026-06-24T06:48:12.538Z" },
 ]
 
 [[package]]
@@ -803,12 +803,12 @@ requires-dist = [
     { name = "black", marker = "extra == 'dev'" },
     { name = "croniter", specifier = ">=6.0.0" },
     { name = "dbt-charts", specifier = "==0.8.0" },
-    { name = "dbt-core", specifier = "==1.10.16" },
-    { name = "dbt-dremio", specifier = "==1.10.0" },
-    { name = "dbt-duckdb", specifier = "==1.10.0" },
+    { name = "dbt-core", specifier = "==1.10.23" },
+    { name = "dbt-dremio", specifier = "==1.10.1" },
+    { name = "dbt-duckdb", specifier = "==1.10.1" },
     { name = "dbt-oracle", specifier = "==1.10.0" },
-    { name = "dbt-postgres", specifier = "==1.10.0" },
-    { name = "dbt-spark", extras = ["session", "pyhive"], marker = "extra == 'spark'", specifier = "==1.10.1" },
+    { name = "dbt-postgres", specifier = "==1.10.2" },
+    { name = "dbt-spark", extras = ["session", "pyhive"], marker = "extra == 'spark'", specifier = "==1.10.3" },
     { name = "dlt", extras = ["ducklake", "filesystem"], specifier = ">=1.30.0" },
     { name = "duckdb", specifier = ">=1.4.3" },
     { name = "fastapi", specifier = ">=0.125.0" },
@@ -865,7 +865,7 @@ wheels = [
 
 [[package]]
 name = "dbt-spark"
-version = "1.10.1"
+version = "1.10.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dbt-adapters" },
@@ -873,9 +873,9 @@ dependencies = [
     { name = "dbt-core" },
     { name = "sqlparams" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/01/16/fa90c03bbc83dd44b6ce3a4a06dffee224b8763a08a7bc64fe745b49e2c3/dbt_spark-1.10.1.tar.gz", hash = "sha256:fc39d57e6bc6afc8bc75472bfd25f6d6fbfbf178c9e455e927300748270d1a5e", size = 77182, upload-time = "2026-02-12T00:42:04.41Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8b/9b/04974aa3c50f97dc5898f05de4c92654b04c15930394c7af2a6a3284f301/dbt_spark-1.10.3.tar.gz", hash = "sha256:3dcafb80c12bdf54da091b6e81a40c51c364a304928de418b86f48fa35fe4da4", size = 78167, upload-time = "2026-06-24T09:57:34.249Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/10/9c/fd9429f4a5bb211a6a5d61000f03639d6f748a939b5ba46e041cc36f49a6/dbt_spark-1.10.1-py3-none-any.whl", hash = "sha256:6904822cad26014ecdc93d52b8d288ef10c8354f58da55d33baf702b707bd9f9", size = 51432, upload-time = "2026-02-12T00:42:02.54Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/ca/871022f6b4ccdefb0ee89e69c90bb4340b54bf119a930099a0f8b690c548/dbt_spark-1.10.3-py3-none-any.whl", hash = "sha256:1906f4cb507c931c4988ea6074603769da7466788b53483546e3abf6eabbf04d", size = 51487, upload-time = "2026-06-24T09:57:32.983Z" },
 ]
 
 [package.optional-dependencies]
@@ -3386,11 +3386,11 @@ wheels = [
 
 [[package]]
 name = "sqlparse"
-version = "0.5.5"
+version = "0.5.4"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/90/76/437d71068094df0726366574cf3432a4ed754217b436eb7429415cf2d480/sqlparse-0.5.5.tar.gz", hash = "sha256:e20d4a9b0b8585fdf63b10d30066c7c94c5d7a7ec47c889a2d83a3caa93ff28e", size = 120815, upload-time = "2025-12-19T07:17:45.073Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/18/67/701f86b28d63b2086de47c942eccf8ca2208b3be69715a1119a4e384415a/sqlparse-0.5.4.tar.gz", hash = "sha256:4396a7d3cf1cd679c1be976cf3dc6e0a51d0111e87787e7a8d780e7d5a998f9e", size = 120112, upload-time = "2025-11-28T07:10:18.377Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/4b/359f28a903c13438ef59ebeee215fb25da53066db67b305c125f1c6d2a25/sqlparse-0.5.5-py3-none-any.whl", hash = "sha256:12a08b3bf3eec877c519589833aed092e2444e68240a3577e8e26148acc7b1ba", size = 46138, upload-time = "2025-12-19T07:17:46.573Z" },
+    { url = "https://files.pythonhosted.org/packages/25/70/001ee337f7aa888fb2e3f5fd7592a6afc5283adb1ed44ce8df5764070f22/sqlparse-0.5.4-py3-none-any.whl", hash = "sha256:99a9f0314977b76d776a0fcb8554de91b9bb8a18560631d6bc48721d07023dcb", size = 45933, upload-time = "2025-11-28T07:10:19.73Z" },
 ]
 
 [[package]]
