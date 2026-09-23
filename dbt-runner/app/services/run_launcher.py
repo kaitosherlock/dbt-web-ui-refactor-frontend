@@ -8,6 +8,7 @@ and tell me the outcome" belongs here rather than in a router.
 
 import asyncio
 import logging
+import shlex
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, Optional
@@ -16,6 +17,7 @@ from sqlalchemy import text
 
 from app.core.db import async_session
 from app.models.dbt import DbtCommand
+from app.services.command import validate_dbt_argv
 from app.services.dbt_service import DbtService
 from app.services.project import ProjectService
 
@@ -28,8 +30,6 @@ CompletionHook = Callable[[Dict[str, Any]], Awaitable[None]]
 
 def dbt_command_name(command: str) -> str:
     """The bare dbt subcommand from a possibly full command string."""
-    import shlex
-
     parts = shlex.split(command or "")
     return parts[0] if parts else "run"
 
@@ -109,6 +109,17 @@ async def launch_dbt_run(
 
     Returns as soon as the row exists - the dbt process outlives this call.
     """
+    # Both the async endpoint and the scheduler arrive here. Refuse the request
+    # before either caller gets a run row for a command that cannot be started.
+    argv = ["dbt", *shlex.split(request.command or "")]
+    if request.selector:
+        argv.extend(["--select", request.selector])
+    if request.target:
+        argv.extend(["--target", request.target])
+    if request.flags:
+        argv.extend(request.flags)
+    validate_dbt_argv(argv)
+
     project_path = await ProjectService().get_or_sync(request.project_id)
     run_id = str(uuid.uuid4())
     started_at = datetime.now(timezone.utc)

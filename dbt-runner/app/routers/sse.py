@@ -6,7 +6,6 @@ Replaces the WebSocket router. No WebSocket dependency.
 import asyncio
 import json
 import logging
-import os
 import shlex
 import time
 import uuid
@@ -26,7 +25,8 @@ from app.core.file_lock import AsyncFileLock
 from app.core.global_semaphore import global_run_semaphore
 from app.core.redis_client import get_redis
 from app.exceptions import DbtOperationError
-from app.services.command import CommandService
+from app.services.command import CommandService, validate_dbt_argv
+from app.services.dbt_environment import dbt_process_environment
 from app.services.dbt_service import DbtService
 from app.services.file_watcher import file_watcher_manager
 from app.services.project import ProjectService
@@ -152,7 +152,7 @@ async def _run_streaming_dbt_command(
     process = await asyncio.create_subprocess_exec(
         *cmd,
         cwd=cwd,
-        env={**os.environ, **(env or {})},
+        env=dbt_process_environment(env),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
         limit=max_line_bytes + 1024,
@@ -336,18 +336,6 @@ async def dbt_sse(
         _elapsed_ms(phase_start),
     )
 
-    project_service = ProjectService()
-    try:
-        phase_start = time.perf_counter()
-        project_path = await project_service.get_or_sync(project_id)
-        logger.info(
-            "[DBT-PERF] sse project_get_or_sync project_id=%s elapsed_ms=%s",
-            project_id,
-            _elapsed_ms(phase_start),
-        )
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Project not found: {e}")
-
     # Build dbt command list
     command = body.command
     selector = body.selector
@@ -362,22 +350,19 @@ async def dbt_sse(
     if body.flags:
         cmd.extend(body.flags)
 
-    # Strip any client-provided --profiles-dir (security: always use server path).
-    # Handles both `--profiles-dir VAL` and `--profiles-dir=VAL` forms.
-    if "--profiles-dir" in cmd:
-        cleaned: list[str] = []
-        skip_next = False
-        for token in cmd:
-            if skip_next:
-                skip_next = False
-                continue
-            if token == "--profiles-dir":
-                skip_next = True
-                continue
-            if token.startswith("--profiles-dir="):
-                continue
-            cleaned.append(token)
-        cmd = cleaned
+    validate_dbt_argv(cmd)
+
+    project_service = ProjectService()
+    try:
+        phase_start = time.perf_counter()
+        project_path = await project_service.get_or_sync(project_id)
+        logger.info(
+            "[DBT-PERF] sse project_get_or_sync project_id=%s elapsed_ms=%s",
+            project_id,
+            _elapsed_ms(phase_start),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Project not found: {e}")
 
     cmd.extend(["--profiles-dir", str(project_path)])
     dbt_env = await DbtService._build_dbt_environment(
