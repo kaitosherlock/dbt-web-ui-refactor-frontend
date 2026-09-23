@@ -1,4 +1,4 @@
-import { auth } from '@/lib/auth'
+import { auth } from '@/server/auth/auth'
 
 export async function GET(
   _request: Request,

@@ -1,4 +1,5 @@
-import { discoverOidc } from '@/lib/oidc'
+import 'server-only'
+import { discoverOidc } from '@/server/auth/oidc'
 
 export interface RefreshTokenResponse {
   access_token: string;

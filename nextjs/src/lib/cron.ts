@@ -6,8 +6,9 @@
  * when it fires. This only rejects obvious junk at the write boundary, so a
  * malformed schedule fails while saving instead of silently never running.
  *
- * Lives outside lib/actions/data.ts because that file is `use server` — every
- * export there must be an async server action.
+ * A plain, synchronous helper — not part of features/orchestrate/server.ts
+ * (which validates schedules and imports this), so it stays importable from
+ * anywhere without pulling in `server-only`.
  */
 
 const CRON_FIELD_PATTERN = /^[0-9*/,\-A-Za-z]+$/

@@ -1,9 +1,10 @@
+import 'server-only'
 import NextAuth, { type NextAuthConfig } from 'next-auth'
 import { Prisma } from '@prisma/client'
-import { authConfig } from '@/lib/auth.config'
-import { AUTH_DISABLED, LOCAL_USER } from '@/lib/auth-constants'
-import { refreshAccessToken } from '@/lib/auth-refresh'
-import { db } from '@/lib/db'
+import { authConfig } from '@/server/auth/auth.config'
+import { AUTH_DISABLED, LOCAL_USER } from '@/server/auth/auth-constants'
+import { refreshAccessToken } from '@/server/auth/auth-refresh'
+import { db } from '@/server/db'
 
 const ACCESS_TOKEN_REFRESH_BUFFER_SECONDS = 60
 

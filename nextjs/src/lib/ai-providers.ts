@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client'
 
-import { db } from '@/lib/db'
-import { decryptSecret, encryptSecret } from '@/lib/crypto'
+import { db } from '@/server/db'
+import { decryptSecret, encryptSecret } from '@/server/crypto'
 import {
   CATALOG_ROUTES,
   PROTOCOLS,

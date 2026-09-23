@@ -176,7 +176,7 @@ describe('assistant model providers', () => {
     await prisma.aiCredential.create({
       data: {
         userId: USER_A, credentialName: 'DEEPSEEK_API_KEY', provider: 'deepseek-official',
-        apiKeyEncrypted: (await import('@/lib/crypto')).encryptSecret('sk-legacy'),
+        apiKeyEncrypted: (await import('@/server/crypto')).encryptSecret('sk-legacy'),
       },
     })
 

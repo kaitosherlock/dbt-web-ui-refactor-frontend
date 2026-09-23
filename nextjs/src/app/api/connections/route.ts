@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getConnections, createConnection, deleteConnection, getDremioSources, deleteDremioSource, updateConnection, updateDremioSource, getConnectionById } from '@/lib/actions/data'
-import { auth } from '@/lib/auth'
+import { getConnections, createConnection, deleteConnection, getDremioSources, deleteDremioSource, updateConnection, updateDremioSource, getConnectionById } from '@/features/connections/server'
+import { auth } from '@/server/auth/auth'
 import { checkLakehouse, releaseLakehouse, LAKEHOUSE_TYPE, type LakehouseMode } from '@/lib/lakehouse'
 
 const CONNECTION_TYPES = new Set(['postgresql', 'duckdb', 'dremio', 'oracle', 'spark', LAKEHOUSE_TYPE])

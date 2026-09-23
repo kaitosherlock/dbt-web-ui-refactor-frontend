@@ -1,3 +1,5 @@
+import 'server-only'
+
 /**
  * The origin the browser actually used.
  *

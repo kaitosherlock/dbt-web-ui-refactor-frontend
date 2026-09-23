@@ -1,4 +1,5 @@
-import { isMalformedBearerHeader } from '@/lib/auth-headers'
+import 'server-only'
+import { isMalformedBearerHeader } from '@/server/auth/auth-headers'
 
 const HOP_BY_HOP_HEADERS = new Set([
   'connection',

@@ -1,5 +1,6 @@
-import { auth } from '@/lib/auth'
-import { db } from '@/lib/db'
+import 'server-only'
+import { auth } from '@/server/auth/auth'
+import { db } from '@/server/db'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 

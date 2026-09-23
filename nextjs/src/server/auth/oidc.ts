@@ -1,3 +1,5 @@
+import 'server-only'
+
 /**
  * OIDC discovery. Server-side only.
  *

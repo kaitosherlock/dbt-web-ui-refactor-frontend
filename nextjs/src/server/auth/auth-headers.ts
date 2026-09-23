@@ -1,3 +1,5 @@
+import 'server-only'
+
 const BEARER_HEADER = /^Bearer [^\s]+$/;
 
 export function isMalformedBearerHeader(value: string | null): boolean {
