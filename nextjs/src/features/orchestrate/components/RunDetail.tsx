@@ -29,7 +29,7 @@ import {
 } from "@/entities/run/model/dbt-run-logs"
 import { cn } from "@/common/lib/utils"
 import RunLogConsole, { downloadTextFile } from "./RunLogConsole"
-import { RunStatusBadge, formatDateTime, formatDuration, getFullCommand, shortHash } from "@/entities/run"
+import { RunStatusBadge, formatDateTime, formatDuration, formatRunTarget, getFullCommand, shortHash } from "@/entities/run"
 import type { DbtRun, DbtRunArtifact } from "@/entities/run"
 
 type DetailTab = "overview" | "nodes" | "logs" | "artifact"
@@ -80,7 +80,7 @@ function buildNodes(run: DbtRun): NodeView[] {
 
 function Metric({ icon: Icon, label, value, note }: { icon: React.ElementType; label: string; value: string; note?: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+    <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
       <div className="flex items-center gap-2 text-xs font-medium text-slate-500"><Icon className="h-3.5 w-3.5" />{label}</div>
       <p className="mt-1 truncate text-sm font-semibold text-slate-900" title={value}>{value}</p>
       {note && <p className="mt-0.5 text-xs text-slate-400">{note}</p>}
@@ -98,7 +98,7 @@ function OverviewTab({ run, nodes }: { run: DbtRun; nodes: NodeView[] }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
         <Metric icon={Clock3} label="Started" value={formatDateTime(run.startedAt)} />
         <Metric icon={Timer} label="Run duration" value={formatDuration(run.durationMs)} note={metadata.elapsedTime != null ? `dbt elapsed ${metadata.elapsedTime.toFixed(2)}s` : undefined} />
         <Metric icon={CircleGauge} label="Executed nodes" value={`${terminalNodes || run.modelsTotal || 0}`} note={`${run.modelsSuccess || 0} passed · ${run.modelsError || 0} failed`} />
@@ -120,7 +120,7 @@ function OverviewTab({ run, nodes }: { run: DbtRun; nodes: NodeView[] }) {
               ["Run ID", run.id],
               ["Invocation ID", metadata.invocationId || "—"],
               ["dbt version", metadata.dbtVersion || "—"],
-              ["Target", metadata.target || "—"],
+              ["Target", formatRunTarget(metadata.target)],
               ["Threads", metadata.threads?.toString() || "—"],
               ["Generated at", formatDateTime(metadata.generatedAt)],
               ["Completed", formatDateTime(run.completedAt)],

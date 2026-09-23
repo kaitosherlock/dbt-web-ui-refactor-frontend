@@ -23,8 +23,10 @@ import { getProjects } from "@/entities/project"
 import { useGlobal } from "@/common/layout/GlobalContext"
 import { Button } from "@/common/ui/button"
 import { Card, CardContent } from "@/common/ui/card"
+import { resolveProjectStatus } from "../model/project-status"
 
 interface LatestProjectRun {
+  status?: string | null
   command: string
   selector: string | null
   modelsTotal: number | null
@@ -115,8 +117,8 @@ export default function DashboardOverview() {
         .slice(0, 5),
     [projects]
   )
-  const readyProjects = projects.filter((project) => project.sync_status === "synced").length
-  const issueProjects = projects.filter((project) => project.sync_status === "error").length
+  const readyProjects = projects.filter((project) => resolveProjectStatus(project) === "synced").length
+  const issueProjects = projects.filter((project) => resolveProjectStatus(project) === "error").length
   const totalModels = projects.reduce((total, project) => total + getProjectModelCount(project), 0)
   const totalRuns = projects.reduce((total, project) => total + (project._count?.runs || 0), 0)
   const healthyRate = projects.length ? Math.round((readyProjects / projects.length) * 100) : 0
@@ -202,12 +204,12 @@ function MetricCard({ icon: Icon, label, value, note, tone }: { icon: React.Elem
 }
 
 function ProjectRow({ project }: { project: DbtProject }) {
-  const status = getStatus(project.sync_status)
+  const status = getStatus(resolveProjectStatus(project))
   return (
     <Link href={`/develop/${project.id}`} className="group flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-gray-50">
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-teal-50"><Database className="h-5 w-5 text-teal-600" /></div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-gray-950 group-hover:text-[#0078D4]">{project.name}</p>
+        <p title={project.name} className="line-clamp-2 break-words text-sm font-semibold text-gray-950 group-hover:text-[#0078D4]">{project.name}</p>
         <p className="mt-0.5 truncate text-xs text-gray-500">{project.description || "dbt transformation project"}</p>
       </div>
       <span className="hidden items-center gap-1.5 text-xs text-gray-500 sm:flex"><GitBranch className="h-3.5 w-3.5" />{project.git_branch || "main"}</span>

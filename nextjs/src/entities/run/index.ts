@@ -8,6 +8,7 @@ export {
   getCommandName,
   COMMAND_LABELS,
   formatCommandLabel,
+  formatRunTarget,
 } from './model/formatters'
 export {
   parseDbtLogLine,

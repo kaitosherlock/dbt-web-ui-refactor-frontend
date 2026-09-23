@@ -25,7 +25,10 @@ export default function ProjectCard({ id, name, description, git_branch, created
                 <Database className="h-5 w-5 text-[#038387]" />
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-gray-900 truncate transition-colors group-hover:text-[#0078D4]">
+                <h3
+                  title={name}
+                  className="font-semibold text-gray-900 line-clamp-2 break-words transition-colors group-hover:text-[#0078D4]"
+                >
                   {name}
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">

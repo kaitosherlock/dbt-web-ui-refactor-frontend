@@ -26,6 +26,7 @@ import {
   validateEventTime,
   validateSelectorName,
   parseSelectors,
+  resolveStateTargets,
 } from "../model/run-options"
 
 interface RunOptionsDialogProps {
@@ -46,7 +47,7 @@ export function RunOptionsDialog({
   open,
   onClose,
   projectId,
-  activeTarget,
+  activeTarget: _activeTarget,
   availableTargets,
   runOptions,
   onOptionsChange,
@@ -139,13 +140,23 @@ export function RunOptionsDialog({
     }
   }, [open, projectId])
 
-  // Compute selected state target and whether state artifacts exist
-  const selectedStateTarget = localOptions.state_target || activeTarget || "dev"
+  // Compute resolved state targets: non-dev targets + state targets from API, default to first with state
+  const stateResolution = useMemo(
+    () =>
+      resolveStateTargets({
+        availableTargets,
+        stateTargets,
+        currentTarget: localOptions.state_target,
+      }),
+    [availableTargets, stateTargets, localOptions.state_target],
+  )
+  const candidateStateTargets = stateResolution.candidateTargets
+  const selectedStateTarget = stateResolution.selectedTarget
   const currentTargetState = useMemo(
     () => stateTargets.find((s) => s.target === selectedStateTarget),
     [stateTargets, selectedStateTarget],
   )
-  const hasStateForSelectedTarget = Boolean(currentTargetState?.manifest)
+  const hasStateForSelectedTarget = stateResolution.hasState
 
   // Vars size calculation and validation
   const varsValidation = useMemo(() => validateVars(varEntries), [varEntries])
@@ -229,7 +240,7 @@ export function RunOptionsDialog({
       event_time_end: undefined,
       full_refresh: false,
       selector_name: "",
-      state_target: activeTarget || "dev",
+      state_target: candidateStateTargets[0] || "",
       defer: false,
       favor_state: false,
     }
@@ -376,7 +387,7 @@ export function RunOptionsDialog({
                     Full refresh (<code className="text-xs">--full-refresh</code>)
                   </span>
                   <span className="mt-0.5 block text-xs text-gray-500">
-                    Drops and recreates incremental models and seeds from scratch (supported on run, build, seed, snapshot).
+                    Drops and recreates incremental models and seeds from scratch (supported on run, build, seed).
                   </span>
                 </div>
               </label>
@@ -643,7 +654,7 @@ export function RunOptionsDialog({
               <div>
                 <h3 className="text-sm font-medium text-gray-900">dbt State & Deferral</h3>
                 <p className="text-xs text-gray-500">
-                  Compare current code against server-saved state artifacts from a named target.
+                  Compare current code against server-saved state artifacts from a named target. State is saved after a successful run/build/seed/snapshot on a non-dev target or by a schedule.
                 </p>
               </div>
 
@@ -663,12 +674,20 @@ export function RunOptionsDialog({
                       }))
                     }
                     className="h-8 flex-1 rounded border border-gray-300 bg-white px-2 text-xs font-mono"
+                    disabled={candidateStateTargets.length === 0}
                   >
-                    {Array.from(new Set(["dev", ...availableTargets])).map((tgt) => (
-                      <option key={tgt} value={tgt}>
-                        {tgt} {tgt === activeTarget ? "(active target)" : ""}
-                      </option>
-                    ))}
+                    {candidateStateTargets.length === 0 ? (
+                      <option value="">No non-dev targets available</option>
+                    ) : (
+                      candidateStateTargets.map((tgt) => {
+                        const hasTgtState = stateTargets.some((s) => s.target === tgt && s.manifest)
+                        return (
+                          <option key={tgt} value={tgt}>
+                            {tgt} {hasTgtState ? "(state ready)" : ""}
+                          </option>
+                        )
+                      })
+                    )}
                   </select>
 
                   {/* Status indicator */}
@@ -699,7 +718,9 @@ export function RunOptionsDialog({
                 )}
                 {!hasStateForSelectedTarget && !stateLoading && (
                   <p className="mt-1.5 text-xs text-amber-700">
-                    No state artifacts exist for target &lsquo;{selectedStateTarget}&rsquo;. Run a successful build on this target to generate state.
+                    {selectedStateTarget
+                      ? `No state artifacts exist for target \u2018${selectedStateTarget}\u2019. State is saved after a successful run/build/seed/snapshot on a non-dev target or by a schedule.`
+                      : "State is saved after a successful run/build/seed/snapshot on a non-dev target or by a schedule."}
                   </p>
                 )}
               </div>

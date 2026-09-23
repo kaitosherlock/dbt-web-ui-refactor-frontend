@@ -79,3 +79,40 @@ export function normalizeDatabricksHttpPath(httpPath: unknown): string {
   }
   return value
 }
+
+/**
+ * Validate and normalize a required warehouse schema name (Snowflake, Databricks).
+ */
+export function normalizeWarehouseSchema(schema: unknown, warehouse: string): string {
+  const value = String(schema ?? '').trim()
+  if (!value) {
+    throw new ConnectionValidationError(
+      `A ${warehouse} connection needs a schema, for example 'PUBLIC' or 'analytics'`,
+    )
+  }
+  return value
+}
+
+/**
+ * Determine whether secret fields can keep the existing stored secret or are required.
+ * When editing a connection, the "leave blank to keep existing" behavior is only valid
+ * if the selected auth type matches the auth type currently stored.
+ */
+export function getSecretFieldState({
+  isEdit,
+  storedAuthType,
+  selectedAuthType,
+}: {
+  isEdit: boolean
+  storedAuthType?: string | null
+  selectedAuthType: string
+}): {
+  canKeepExisting: boolean
+  isRequired: boolean
+} {
+  const canKeepExisting = Boolean(isEdit && storedAuthType && storedAuthType === selectedAuthType)
+  return {
+    canKeepExisting,
+    isRequired: !canKeepExisting,
+  }
+}
