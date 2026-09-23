@@ -1,25 +1,10 @@
-import { getSession } from 'next-auth/react'
-
-export async function apiFetch<T = unknown>(
-  url: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const session = await getSession()
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>),
-  }
-  if (session?.accessToken) {
-    headers['Authorization'] = `Bearer ${session.accessToken}`
-  }
-
-  const res = await fetch(url, { ...options, headers })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(err.error || `Request failed: ${res.status}`)
-  }
-  return res.json()
-}
+// apiFetch moved to @/common/api/client (docs/frontend-refactor-plan.md, Phase
+// 2) — the one HTTP client shared with dbt-runner calls. Imported (not just
+// re-exported) so the ~40 domain helpers below keep calling it unchanged, and
+// re-exported so existing `import { apiFetch } from '@/lib/api-client'` keeps
+// working too.
+import { apiFetch } from '@/common/api/client'
+export { apiFetch }
 
 // The UI was written against Supabase's snake_case column names, but Prisma
 // returns camelCase. Map project rows back to snake_case so pages keep working.
