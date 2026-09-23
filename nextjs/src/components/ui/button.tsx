@@ -1,7 +1,7 @@
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "@/core/utils"
+import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:translate-y-px [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
@@ -10,9 +10,9 @@ const buttonVariants = cva(
       variant: {
         default: "bg-[#0078D4] text-white shadow-[0_1px_2px_rgba(0,80,140,0.2)] hover:bg-[#106EBE] hover:shadow-md focus-visible:ring-[#0078D4]",
         destructive: "bg-red-600 text-white shadow-sm hover:bg-red-700 focus-visible:ring-red-600",
-        outline: "border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-700 dark:text-gray-200 shadow-sm hover:border-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 focus-visible:ring-[#0078D4]",
-        secondary: "bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-slate-700 focus-visible:ring-gray-400",
-        ghost: "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-white focus-visible:ring-gray-400",
+        outline: "border border-slate-300 bg-white text-gray-700 shadow-sm hover:border-slate-400 hover:bg-slate-50 focus-visible:ring-[#0078D4]",
+        secondary: "bg-gray-100 text-gray-900 hover:bg-gray-200 focus-visible:ring-gray-400",
+        ghost: "text-gray-700 hover:bg-gray-100 hover:text-gray-900 focus-visible:ring-gray-400",
         link: "text-[#0078D4] underline-offset-4 hover:underline",
       },
       size: {

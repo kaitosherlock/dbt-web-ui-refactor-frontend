@@ -2,7 +2,7 @@
 
 import React from "react"
 import { useParams } from "next/navigation"
-import DevelopLayout from "@/components-v2/develop/DevelopLayout"
+import DevelopLayout from "@/components/develop/DevelopLayout"
 
 export default function ProjectIDEPage() {
   const params = useParams()
