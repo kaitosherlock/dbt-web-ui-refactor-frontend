@@ -4,7 +4,9 @@ Clients select a named target, never a filesystem path.  The path below is
 therefore derived entirely from validated project and target identifiers.
 """
 
+import asyncio
 import json
+import logging
 import os
 import re
 import shutil
@@ -16,6 +18,8 @@ from typing import Any, Dict, List, Optional
 
 from app.config import settings
 from app.exceptions import DbtOperationError
+
+logger = logging.getLogger(__name__)
 
 STATE_ARTIFACTS = ("manifest.json", "run_results.json")
 DEFAULT_STATE_TARGET = "dev"
@@ -74,12 +78,70 @@ def effective_target(argv: List[str]) -> str:
     return target or DEFAULT_STATE_TARGET
 
 
+def _file_mtime_ns(path: Path) -> Optional[int]:
+    try:
+        return path.stat().st_mtime_ns
+    except OSError:
+        return None
+
+
+async def save_state_after_run(
+    state: "StateService",
+    *,
+    project_id: str,
+    argv: List[str],
+    project_path: Path,
+    returncode: int,
+    run_results_mtime_before: Optional[int],
+    persist_default_target: bool = False,
+) -> bool:
+    """Save fresh state produced by one successful dbt invocation.
+
+    Callers must invoke this while holding the project's run lock.  Taking the
+    pre-run mtime under that same lock ensures another invocation cannot be
+    mistaken for the producer of ``run_results.json``.
+    """
+    command_name = argv[1] if len(argv) > 1 else ""
+    target = effective_target(argv)
+    if (
+        returncode != 0
+        or command_name not in STATE_PRODUCING_COMMANDS
+        or (target == DEFAULT_STATE_TARGET and not persist_default_target)
+    ):
+        return False
+
+    run_results_path = project_path / "target" / "run_results.json"
+    current_mtime = _file_mtime_ns(run_results_path)
+    if current_mtime is None or (
+        run_results_mtime_before is not None
+        and current_mtime <= run_results_mtime_before
+    ):
+        return False
+
+    try:
+        saved = await asyncio.to_thread(state.save, project_id, target, project_path)
+        if not saved:
+            logger.warning(
+                "Successful dbt command for %s/%s produced no manifest to save",
+                project_id,
+                target,
+            )
+        return saved
+    except Exception as exc:
+        logger.warning(
+            "Could not save dbt state for %s/%s: %s", project_id, target, exc
+        )
+        return False
+
+
 def resolve_request_state(
     state: "StateService",
     request: Any,
     command_name: str,
     project_path: Path,
     resolved: Optional[Path] = None,
+    *,
+    project_id: Optional[str] = None,
 ) -> Optional[Path]:
     """Check a request's state options and return the --state dir to append.
 
@@ -119,7 +181,8 @@ def resolve_request_state(
     if not request.state_target:
         return None
     validate_target_name(request.state_target)
-    return resolved or state.require_state(request.project_id, request.state_target)
+    request_project_id = project_id or getattr(request, "project_id", None)
+    return resolved or state.require_state(request_project_id, request.state_target)
 
 
 class StateService:

@@ -311,6 +311,10 @@ def append_run_options(
 
     selector_name = option("selector_name")
     if supported("selector_name", SELECTOR_COMMANDS, selector_name):
+        if _has_flag(argv, "--select") or _has_flag(argv, "-s"):
+            _refuse(
+                "selector_name cannot be combined with selector/--select; choose one"
+            )
         conflict("--selector")
         if not SELECTOR_NAME_RE.fullmatch(str(selector_name)):
             _refuse(f"invalid selector name '{selector_name}'")

@@ -5,12 +5,27 @@ Uses dbt manifest.json for table-level lineage and sqlglot for column-level line
 """
 
 import json
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 # Conditional import for sqlglot
 SQLGLOT_AVAILABLE = False
+
+ANSI_ESCAPE_RE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
+SQLGLOT_DIALECT_BY_ADAPTER = {
+    "databricks": "databricks",
+    "snowflake": "snowflake",
+    "postgresql": "postgres",
+    "postgres": "postgres",
+    "duckdb": "duckdb",
+    "oracle": "oracle",
+    "spark": "spark",
+    # sqlglot has no Dremio dialect. Its generic parser is the least
+    # surprising fallback for compiled Dremio SQL.
+    "dremio": None,
+}
 
 try:
     from sqlglot import parse_one
@@ -50,6 +65,21 @@ class ColumnLineage:
     source_column: str
     source_table: str
     transformation: Optional[str] = None
+
+
+class ColumnLineageAnalysisError(ValueError):
+    """Column lineage could not be produced for the compiled query."""
+
+
+def clean_error_message(error: Any) -> str:
+    """Return a single safe error string without terminal colour controls."""
+    return ANSI_ESCAPE_RE.sub("", str(error)).strip()
+
+
+def sqlglot_dialect_for_adapter(adapter_type: Any) -> Optional[str]:
+    """Map the adapter that compiled an artifact to sqlglot's reader name."""
+    name = str(adapter_type or "").strip().lower()
+    return SQLGLOT_DIALECT_BY_ADAPTER.get(name)
 
 
 def parse_manifest(manifest_path: Path) -> Dict[str, Any]:
@@ -207,7 +237,9 @@ def _leaf_sources(node: Any) -> List[Dict[str, str]]:
 def get_column_lineage(
     compiled_sql: str,
     schema: Optional[Dict[str, Dict[str, str]]] = None,
-    dialect: str = "duckdb",
+    dialect: Optional[str] = None,
+    *,
+    errors: Optional[List[str]] = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
     Analyze column-level lineage using sqlglot's built-in lineage engine.
@@ -222,16 +254,18 @@ def get_column_lineage(
         Dict mapping each output column to its ultimate source columns.
     """
     if not SQLGLOT_AVAILABLE:
-        return {"error": "sqlglot not available"}  # type: ignore[dict-item]
+        raise ColumnLineageAnalysisError("sqlglot not available")
 
     try:
         parsed = parse_one(compiled_sql, dialect=dialect)
         output_columns = parsed.named_selects
     except Exception as e:
-        return {"error": f"Failed to parse SQL: {str(e)}"}  # type: ignore[dict-item]
+        raise ColumnLineageAnalysisError(
+            f"Failed to parse SQL: {clean_error_message(e)}"
+        ) from None
 
     if not output_columns:
-        return {"error": "No output columns found"}  # type: ignore[dict-item]
+        raise ColumnLineageAnalysisError("No output columns found")
 
     column_lineage: Dict[str, List[Dict[str, Any]]] = {}
     for output_col in output_columns:
@@ -239,13 +273,12 @@ def get_column_lineage(
             node = lineage(output_col, compiled_sql, schema=schema, dialect=dialect)
             column_lineage[output_col] = _leaf_sources(node)
         except Exception as e:
-            column_lineage[output_col] = [
-                {
-                    "column": output_col,
-                    "table": "unknown",
-                    "expression": f"Failed to trace lineage: {str(e)}",
-                }
-            ]
+            column_lineage[output_col] = []
+            if errors is not None:
+                errors.append(
+                    f"Failed to trace lineage for '{output_col}': "
+                    f"{clean_error_message(e)}"
+                )
 
     return column_lineage
 
@@ -264,6 +297,7 @@ def get_full_lineage(project_path: Path, model_name: str) -> Dict[str, Any]:
         "model": model_name,
         "table_lineage": {"nodes": [], "edges": []},
         "column_lineage": {},
+        "column_lineage_error": None,
     }
 
     # Get table lineage from manifest
@@ -281,7 +315,7 @@ def get_full_lineage(project_path: Path, model_name: str) -> Dict[str, Any]:
             else:
                 result["success"] = True
         except Exception as e:
-            result["error"] = f"Failed to parse manifest: {str(e)}"
+            result["error"] = f"Failed to parse manifest: {clean_error_message(e)}"
     else:
         result["error"] = "manifest.json not found. Run 'dbt compile' first."
         return result
@@ -314,9 +348,20 @@ def get_full_lineage(project_path: Path, model_name: str) -> Dict[str, Any]:
                         for table_name in filter(None, relation_names):
                             schema[table_name] = columns
 
-                result["column_lineage"] = get_column_lineage(compiled_sql, schema)
+                adapter_type = manifest.get("metadata", {}).get("adapter_type")
+                dialect = sqlglot_dialect_for_adapter(adapter_type)
+                column_errors: List[str] = []
+                result["column_lineage"] = get_column_lineage(
+                    compiled_sql,
+                    schema,
+                    dialect=dialect,
+                    errors=column_errors,
+                )
+                if column_errors:
+                    result["column_lineage_error"] = "; ".join(column_errors)
             except Exception as e:
-                result["column_lineage"] = {"error": str(e)}
+                result["column_lineage"] = {}
+                result["column_lineage_error"] = clean_error_message(e)
             break
 
     return result

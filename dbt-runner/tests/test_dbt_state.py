@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from app.exceptions import DbtOperationError
 from app.models.dbt import DbtCloneRequest, DbtCommand, DbtRetryRequest
 from app.routers.dbt import clone_dbt_state, delete_dbt_target_state, retry_dbt_run
+from app.routers.sse import DbtCommandRequest, dbt_sse
 from app.routers.project import ProjectDeleteRequest, delete_project
 from app.services.command import validate_dbt_argv
 from app.services.dbt_service import DbtService
@@ -242,6 +243,69 @@ class StateCommandTest(unittest.IsolatedAsyncioTestCase):
         request = DbtCommand(project_id=PROJECT_ID, command="build")
         _result, _run, state, project = await self._run(0, request, persist_state=True)
         state.save.assert_called_once_with(PROJECT_ID, "dev", project)
+
+    async def test_streaming_build_uses_state_flags_and_saves_fresh_prod_state(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        project = Path(temporary.name)
+        state = MagicMock(spec=StateService)
+        state.require_state.return_value = project / "saved-state" / "prod"
+        state.save.return_value = True
+        project_service = MagicMock()
+        project_service.get_or_sync = AsyncMock(return_value=project)
+        insert_run = AsyncMock()
+        captured_argv = []
+
+        async def run_stream(argv, *_args, on_line, **_kwargs):
+            captured_argv.extend(argv)
+            _write_artifacts(project, invocation_id="sse-invocation")
+            await on_line("Completed successfully")
+            return 0
+
+        body = DbtCommandRequest(
+            command="build --target prod",
+            state_target="prod",
+            defer=True,
+            favor_state=True,
+        )
+        with (
+            patch("app.routers.sse.resolve_user_id", AsyncMock(return_value="user-1")),
+            patch("app.routers.sse._verify_project_ownership", AsyncMock()),
+            patch("app.routers.sse.ProjectService", return_value=project_service),
+            patch("app.routers.sse.StateService", return_value=state),
+            patch("app.routers.sse.DbtService._insert_run_start", insert_run),
+            patch(
+                "app.routers.sse.DbtService._build_dbt_environment",
+                AsyncMock(return_value={}),
+            ),
+            patch(
+                "app.routers.sse.DbtService._regenerate_profiles_from_db",
+                AsyncMock(return_value={}),
+            ),
+            patch("app.routers.sse.global_run_semaphore", return_value=_AsyncContext()),
+            patch("app.routers.sse.AsyncFileLock.lock", return_value=_AsyncContext()),
+            patch("app.routers.sse._run_streaming_dbt_command", side_effect=run_stream),
+            patch(
+                "app.routers.sse._SseRunPersistence.persist_complete", AsyncMock()
+            ),
+        ):
+            response = await dbt_sse(
+                PROJECT_ID, body, claims={"sub": "subject"}, session=MagicMock()
+            )
+            chunks = [chunk async for chunk in response.body_iterator]
+
+        self.assertTrue(any('"type": "completed"' in chunk for chunk in chunks))
+        self.assertEqual(
+            captured_argv[captured_argv.index("--state") + 1],
+            str(state.require_state.return_value),
+        )
+        self.assertIn("--defer", captured_argv)
+        self.assertIn("--favor-state", captured_argv)
+        state.require_state.assert_called_once_with(PROJECT_ID, "prod")
+        state.save.assert_called_once_with(PROJECT_ID, "prod", project)
+        # _insert_run_start owns the CLI-spelling -> database-enum mapping;
+        # SSE must pass it the actual command, not the default "run".
+        self.assertEqual(insert_run.await_args.args[3], "build")
 
     async def test_retry_with_a_private_state_dir_appends_state_without_reading_target(self):
         """A retry started with its own server-owned state dir (set by the

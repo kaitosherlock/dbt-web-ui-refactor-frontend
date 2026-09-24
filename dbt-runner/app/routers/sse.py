@@ -26,11 +26,17 @@ from app.core.global_semaphore import global_run_semaphore
 from app.core.redis_client import get_redis
 from app.exceptions import DbtOperationError
 from app.models.dbt import DbtRunOptions
-from app.services.command import CommandService, append_run_options, validate_dbt_argv
+from app.services.command import (
+    CommandService,
+    append_run_options,
+    append_server_state_flags,
+    validate_dbt_argv,
+)
 from app.services.dbt_environment import dbt_process_environment
 from app.services.dbt_service import DbtService
 from app.services.file_watcher import file_watcher_manager
 from app.services.project import ProjectService
+from app.services.state import StateService, resolve_request_state, save_state_after_run
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +143,9 @@ class DbtCommandRequest(DbtRunOptions):
     command: str
     selector: str | None = None
     flags: list[str] | None = None
+    state_target: str | None = None
+    defer: bool = False
+    favor_state: bool = False
     environment_variables: dict[str, str] | None = None
 
 
@@ -366,6 +375,20 @@ async def dbt_sse(
         raise HTTPException(status_code=404, detail=f"Project not found: {e}")
 
     append_run_options(cmd, body, project_path=project_path)
+    state_service = StateService()
+    resolved_state_path = resolve_request_state(
+        state_service,
+        body,
+        command_name,
+        project_path,
+        project_id=project_id,
+    )
+    append_server_state_flags(
+        cmd,
+        resolved_state_path,
+        defer=body.defer,
+        favor_state=body.favor_state,
+    )
     cmd.extend(["--profiles-dir", str(project_path)])
     dbt_env = await DbtService._build_dbt_environment(
         session, project_id, user_id, body.environment_variables, {}
@@ -435,6 +458,13 @@ async def dbt_sse(
                         run_id,
                         _elapsed_ms(lock_wait_start),
                     )
+                    # Refresh the baseline only after acquiring the project
+                    # lock. A different run may have completed while this
+                    # request was waiting.
+                    results_mtime_before = DbtService._get_file_mtime(
+                        run_results_path
+                    )
+                    persistence.run_results_mtime_before = results_mtime_before
                     subprocess_start = time.perf_counter()
 
                     async def enqueue_output(line: str) -> None:
@@ -490,6 +520,14 @@ async def dbt_sse(
                     )
                     if returncode == -1:
                         raise asyncio.CancelledError()
+                    await save_state_after_run(
+                        state_service,
+                        project_id=project_id,
+                        argv=cmd,
+                        project_path=project_path,
+                        returncode=returncode,
+                        run_results_mtime_before=results_mtime_before,
+                    )
             status = "success" if returncode == 0 else "error"
             error_message = None if returncode == 0 else "\n".join(output_lines)
             if returncode == 0 and command_name == "deps":

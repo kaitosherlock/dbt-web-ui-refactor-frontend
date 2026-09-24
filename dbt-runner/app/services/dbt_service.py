@@ -30,7 +30,7 @@ from app.core.global_semaphore import (
 )
 from app.core.crypto import decrypt_secret_or_plaintext
 from app.exceptions import DbtOperationError
-from app.lineage import get_full_lineage
+from app.lineage import clean_error_message, get_full_lineage
 from app.models.dbt import (
     CompileRequest,
     DbtCommand,
@@ -61,12 +61,10 @@ from app.services.dbt_environment import (
 from app.services.dbt_worker import DbtWarmWorkerError, DbtWarmWorkerPool, warm_worker_pool
 from app.services.project import ProjectService
 from app.services.state import (
-    DEFAULT_STATE_TARGET,
-    STATE_PRODUCING_COMMANDS,
     TARGET_NAME_RE,
     StateService,
-    effective_target,
     resolve_request_state,
+    save_state_after_run,
     validate_target_name,
 )
 from app.core import duckdb_resources
@@ -1194,13 +1192,7 @@ class DbtService:
         started_at = started_at or datetime.now(timezone.utc)
         command_str = " ".join(cmd)
         run_results_path = project_path / "target" / "run_results.json"
-        run_results_mtime_before = self._get_file_mtime(run_results_path)
-        # A full command string may carry its own --target, so the request
-        # field alone does not say which target's state this run produces.
-        state_target = effective_target(cmd)
-        save_state = command_name in STATE_PRODUCING_COMMANDS and (
-            persist_state or state_target != DEFAULT_STATE_TARGET
-        )
+        run_results_mtime_before: Optional[int] = None
 
         # Save run start to DB (skipped when caller already inserted the row,
         # e.g. the async /dbt/runs endpoint).
@@ -1229,6 +1221,11 @@ class DbtService:
                         run_id,
                         _elapsed_ms(lock_wait_start),
                     )
+                    # Sample immediately before this invocation while holding
+                    # the project lock, so another run's artifacts can never
+                    # be attributed to this one.
+                    run_results_mtime_before = self._get_file_mtime(run_results_path)
+
                     # Retry logic for DuckDB lock issues (kept for backward compatibility)
                     max_retries = 3
                     retry_delay = 2
@@ -1269,34 +1266,15 @@ class DbtService:
                     # Snapshot while the project lock is still held. Otherwise
                     # the next run can replace target/ between process exit and
                     # this copy, assigning its artifacts to the wrong run.
-                    # A run_results.json this invocation did not rewrite
-                    # belongs to an earlier run, and so may its manifest.
-                    if (
-                        save_state
-                        and returncode == 0
-                        and self._get_file_mtime(run_results_path)
-                        != run_results_mtime_before
-                    ):
-                        try:
-                            saved = await asyncio.to_thread(
-                                self.state.save,
-                                request.project_id,
-                                state_target,
-                                project_path,
-                            )
-                            if not saved:
-                                logger.warning(
-                                    "Successful dbt command for %s/%s produced no manifest to save",
-                                    request.project_id,
-                                    state_target,
-                                )
-                        except Exception as exc:
-                            logger.warning(
-                                "Could not save dbt state for %s/%s: %s",
-                                request.project_id,
-                                state_target,
-                                exc,
-                            )
+                    await save_state_after_run(
+                        self.state,
+                        project_id=request.project_id,
+                        argv=cmd,
+                        project_path=project_path,
+                        returncode=returncode,
+                        run_results_mtime_before=run_results_mtime_before,
+                        persist_default_target=persist_state,
+                    )
         except asyncio.CancelledError:
             # User cancelled - ensure lock is released
             await AsyncFileLock.force_release(request.project_id, "dbt_run")
@@ -3155,7 +3133,8 @@ class DbtService:
             return {
                 "success": False,
                 "model": model_name,
-                "error": str(e),
+                "error": clean_error_message(e),
                 "table_lineage": {"nodes": [], "edges": []},
                 "column_lineage": {},
+                "column_lineage_error": None,
             }

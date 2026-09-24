@@ -270,6 +270,19 @@ def test_selector_is_refused_for_run_operation_and_with_a_client_selector(tmp_pa
         )
 
 
+@pytest.mark.parametrize(
+    "argv",
+    (["dbt", "build", "--select", "tag:daily"], ["dbt", "build", "-s", "tag:daily"]),
+)
+def test_named_selector_cannot_be_combined_with_select(tmp_path, argv):
+    project = _project_with_selectors(tmp_path)
+    with pytest.raises(
+        DbtOperationError, match="selector_name cannot be combined with selector/--select"
+    ) as caught:
+        append_run_options(argv, _options(selector_name="nightly"), project_path=project)
+    assert caught.value.status_code == 400
+
+
 # ---- the command paths use it -----------------------------------------------
 
 
