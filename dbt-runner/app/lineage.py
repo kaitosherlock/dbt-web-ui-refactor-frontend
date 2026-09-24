@@ -28,8 +28,11 @@ SQLGLOT_DIALECT_BY_ADAPTER = {
 }
 
 try:
-    from sqlglot import parse_one
+    from sqlglot import Dialect, exp, parse_one
     from sqlglot.lineage import lineage
+    from sqlglot.optimizer.qualify import qualify
+    from sqlglot.optimizer.scope import build_scope
+    from sqlglot.schema import MappingSchema
 
     SQLGLOT_AVAILABLE = True
 except ImportError:
@@ -208,6 +211,15 @@ def _leaf_sources(node: Any) -> List[Dict[str, str]]:
     sources: List[Dict[str, str]] = []
     seen: set = set()
 
+    def unquote(identifier: str) -> str:
+        if len(identifier) >= 2 and (
+            identifier[0] == identifier[-1] and identifier[0] in {'"', "`"}
+        ):
+            return identifier[1:-1]
+        if identifier.startswith("[") and identifier.endswith("]"):
+            return identifier[1:-1]
+        return identifier
+
     def walk(n: Any) -> None:
         if not n.downstream:
             name = n.name or ""
@@ -216,6 +228,13 @@ def _leaf_sources(node: Any) -> List[Dict[str, str]]:
                 table, column = name.rsplit(".", 1)
             else:
                 table, column = "unknown", name
+            column = unquote(column)
+            if isinstance(n.expression, exp.Table):
+                # A leaf's node name uses the query alias. Report the physical
+                # relation from its expression instead.
+                table = ".".join(part.name for part in n.expression.parts)
+            else:
+                table = ".".join(unquote(part) for part in table.split("."))
             key = (table, column)
             if column and key not in seen:
                 seen.add(key)
@@ -234,9 +253,144 @@ def _leaf_sources(node: Any) -> List[Dict[str, str]]:
     return sources
 
 
+def _normalise_identifier(name: Any, dialect: Optional[str]) -> str:
+    """Normalise an artifact or parsed SQL identifier using the target dialect."""
+    identifier = (
+        name.copy()
+        if isinstance(name, exp.Identifier)
+        else exp.to_identifier(str(name or ""))
+    )
+    return Dialect.get_or_raise(dialect).normalize_identifier(identifier).name
+
+
+def _relation_key(parts: List[Any], dialect: Optional[str]) -> tuple[str, ...]:
+    """Return the dialect-normalised, non-empty parts of a relation name."""
+    return tuple(
+        _normalise_identifier(part, dialect)
+        for part in parts
+        if part is not None and str(part)
+    )
+
+
+def _upstream_relations(
+    manifest: Dict[str, Any], model_name: str
+) -> Dict[str, Dict[str, Any]]:
+    """Return the transitive manifest relations upstream of ``model_name``."""
+    relations = {**manifest.get("nodes", {}), **manifest.get("sources", {})}
+    current_id = next(
+        (
+            node_id
+            for node_id, node_data in relations.items()
+            if node_data.get("name") == model_name
+        ),
+        None,
+    )
+    if current_id is None:
+        return {}
+
+    upstream: Dict[str, Dict[str, Any]] = {}
+    pending = list(relations[current_id].get("depends_on", {}).get("nodes", []))
+    while pending:
+        node_id = pending.pop()
+        if node_id in upstream:
+            continue
+        node_data = relations.get(node_id)
+        if not node_data:
+            continue
+        upstream[node_id] = node_data
+        pending.extend(node_data.get("depends_on", {}).get("nodes", []))
+    return upstream
+
+
+def _artifact_columns(
+    node_id: str,
+    node_data: Dict[str, Any],
+    catalog: Dict[str, Any],
+) -> Dict[str, str]:
+    """Prefer catalog columns for a relation, falling back to manifest columns."""
+    catalog_entry = catalog.get("nodes", {}).get(node_id) or catalog.get(
+        "sources", {}
+    ).get(node_id)
+    catalog_columns = catalog_entry.get("columns") if catalog_entry else None
+    artifact_columns = catalog_columns or node_data.get("columns", {})
+
+    columns: Dict[str, str] = {}
+    for key, column_data in artifact_columns.items():
+        column_data = column_data or {}
+        column_name = column_data.get("name") or key
+        columns[column_name] = (
+            column_data.get("type")
+            or column_data.get("data_type")
+            or "unknown"
+        )
+    return columns
+
+
+def build_sqlglot_schema(
+    compiled_sql: str,
+    manifest: Dict[str, Any],
+    catalog: Optional[Dict[str, Any]],
+    model_name: str,
+    dialect: Optional[str],
+) -> Any:
+    """Build a schema whose relation keys exactly match the compiled SQL.
+
+    Manifest relation metadata identifies each physical upstream relation. The
+    table expressions from the compiled query are used as the schema keys so
+    quoting and qualification depth match what sqlglot parsed.
+    """
+    schema = MappingSchema(dialect=dialect, normalize=True)
+    try:
+        parsed = parse_one(compiled_sql, dialect=dialect)
+    except Exception:
+        # get_column_lineage owns parse error reporting and sanitisation.
+        return schema
+    upstream = _upstream_relations(manifest, model_name)
+    catalog = catalog or {}
+
+    relation_index: Dict[tuple[str, ...], List[tuple[str, Dict[str, Any]]]] = {}
+    for node_id, node_data in upstream.items():
+        identifier = (
+            node_data.get("identifier")
+            or node_data.get("alias")
+            or node_data.get("name")
+            or get_node_name(node_id)
+        )
+        full_key = _relation_key(
+            [node_data.get("database"), node_data.get("schema"), identifier],
+            dialect,
+        )
+        # Compiled relations can omit a database or both qualifiers. Index each
+        # suffix, but only use unambiguous matches below.
+        for depth in range(1, len(full_key) + 1):
+            relation_index.setdefault(full_key[-depth:], []).append(
+                (node_id, node_data)
+            )
+
+    for table in parsed.find_all(exp.Table):
+        compiled_key = _relation_key(
+            [table.args.get("catalog"), table.args.get("db"), table.this],
+            dialect,
+        )
+        matches = relation_index.get(compiled_key, [])
+        if len(matches) != 1:
+            continue
+        node_id, node_data = matches[0]
+        columns = _artifact_columns(node_id, node_data, catalog)
+        if columns:
+            schema.add_table(
+                table,
+                columns,
+                dialect=dialect,
+                normalize=True,
+                match_depth=False,
+            )
+    return schema
+
+
 def get_column_lineage(
     compiled_sql: str,
-    schema: Optional[Dict[str, Dict[str, str]]] = None,
+    schema: Optional[Any] = None,
     dialect: Optional[str] = None,
     *,
     errors: Optional[List[str]] = None,
@@ -258,7 +412,15 @@ def get_column_lineage(
 
     try:
         parsed = parse_one(compiled_sql, dialect=dialect)
-        output_columns = parsed.named_selects
+        qualified = qualify(
+            parsed,
+            dialect=dialect,
+            schema=schema,
+            identify=False,
+            validate_qualify_columns=False,
+        )
+        output_columns = qualified.named_selects
+        scope = build_scope(qualified)
     except Exception as e:
         raise ColumnLineageAnalysisError(
             f"Failed to parse SQL: {clean_error_message(e)}"
@@ -270,7 +432,13 @@ def get_column_lineage(
     column_lineage: Dict[str, List[Dict[str, Any]]] = {}
     for output_col in output_columns:
         try:
-            node = lineage(output_col, compiled_sql, schema=schema, dialect=dialect)
+            node = lineage(
+                output_col,
+                qualified,
+                schema=schema,
+                dialect=dialect,
+                scope=scope,
+            )
             column_lineage[output_col] = _leaf_sources(node)
         except Exception as e:
             column_lineage[output_col] = []
@@ -328,28 +496,21 @@ def get_full_lineage(project_path: Path, model_name: str) -> Dict[str, Any]:
             try:
                 compiled_sql = sql_file.read_text()
 
-                # Build schema from manifest columns
-                schema = {}
-                manifest_relations = {
-                    **manifest.get("nodes", {}),
-                    **manifest.get("sources", {}),
-                }
-                for node_id, node_data in manifest_relations.items():
-                    if node_data.get("columns"):
-                        columns = {
-                            col_name: col_data.get("data_type", "unknown")
-                            for col_name, col_data in node_data["columns"].items()
-                        }
-                        relation_names = {
-                            node_data.get("name"),
-                            node_data.get("identifier"),
-                            get_node_name(node_id),
-                        }
-                        for table_name in filter(None, relation_names):
-                            schema[table_name] = columns
-
                 adapter_type = manifest.get("metadata", {}).get("adapter_type")
                 dialect = sqlglot_dialect_for_adapter(adapter_type)
+                catalog_path = target_path / "catalog.json"
+                catalog = (
+                    json.loads(catalog_path.read_text())
+                    if catalog_path.exists()
+                    else {}
+                )
+                schema = build_sqlglot_schema(
+                    compiled_sql,
+                    manifest,
+                    catalog,
+                    model_name,
+                    dialect,
+                )
                 column_errors: List[str] = []
                 result["column_lineage"] = get_column_lineage(
                     compiled_sql,
