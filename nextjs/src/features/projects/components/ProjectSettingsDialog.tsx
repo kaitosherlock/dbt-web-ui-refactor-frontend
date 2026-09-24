@@ -222,6 +222,7 @@ export default function ProjectSettingsDialog({
               <LakehousePanel
                 projectId={project.id}
                 connections={connections}
+                activeConnectionId={activeConnectionId}
                 disabled={busy || Boolean(project.deleted_at)}
               />
             )}

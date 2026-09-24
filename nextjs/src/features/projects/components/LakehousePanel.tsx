@@ -1,18 +1,27 @@
 "use client"
 
-import React, { useCallback, useEffect, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useState } from "react"
 import { AlertTriangle, Loader2 } from "lucide-react"
 import { Button } from "@/common/ui/button"
 import type { Connection } from "@/entities/connection"
+import { filesApi } from "@/entities/file"
+import { getProjectTargets, type ProjectTargetRow } from "@/entities/target"
 import {
   getProjectLakehouse,
   setProjectLakehouse,
   type ProjectLakehouse,
 } from "@/features/lakehouse"
+import { hasLiteralLakeDatabaseLine } from "../model/lakehouseDatabaseLine"
+
+const PROJECT_YML_PATH = "dbt_project.yml"
+const DUCKDB_TYPE = "duckdb"
 
 interface Props {
   projectId: string
   connections: Connection[]
+  /** The project's own connection, i.e. target `dev`, used to tell whether
+   * this project has any target that isn't dbt-duckdb. */
+  activeConnectionId?: string
   disabled?: boolean
 }
 
@@ -22,9 +31,14 @@ const SELECT_CLS =
 export default function LakehousePanel({
   projectId,
   connections,
+  activeConnectionId,
   disabled,
 }: Props): React.ReactElement {
   const [state, setState] = useState<ProjectLakehouse | null>(null)
+  const [targets, setTargets] = useState<ProjectTargetRow[]>([])
+  // Read-only: only used to detect a stale literal `+database: lake` for the
+  // warning banner below. dbt-runner is the single writer of this line.
+  const [dbtProjectYml, setDbtProjectYml] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -34,6 +48,13 @@ export default function LakehousePanel({
     getProjectLakehouse(projectId)
       .then(setState)
       .catch((e) => setError(e instanceof Error ? e.message : "Could not load lakehouse settings"))
+    getProjectTargets(projectId)
+      .then(setTargets)
+      .catch(() => setTargets([]))
+    filesApi
+      .read(projectId, PROJECT_YML_PATH)
+      .then((res) => setDbtProjectYml(res.content))
+      .catch(() => setDbtProjectYml(null))
   }, [projectId])
 
   useEffect(load, [load])
@@ -53,6 +74,22 @@ export default function LakehousePanel({
     },
     [projectId, load],
   )
+
+  // Every target this project runs against: `dev` (its own connection) plus
+  // any project_targets row. A lakehouse or dremio_source can't back a target
+  // (see TargetsPanel), so only `connections` rows count.
+  const targetConnectionTypes = useMemo(() => {
+    const devType = connections.find((c) => c.id === activeConnectionId)?.type
+    const extraTypes = targets.map(
+      (t) => t.connection?.connectionType ?? connections.find((c) => c.id === t.connectionId)?.type,
+    )
+    return [devType, ...extraTypes].filter((t): t is string => Boolean(t))
+  }, [connections, activeConnectionId, targets])
+
+  const hasNonDuckdbTarget = targetConnectionTypes.some((t) => t.toLowerCase() !== DUCKDB_TYPE)
+
+  const legacyLiteralLakeLine =
+    hasNonDuckdbTarget && dbtProjectYml != null && hasLiteralLakeDatabaseLine(dbtProjectYml)
 
   if (!state) {
     return (
@@ -105,6 +142,29 @@ export default function LakehousePanel({
         </div>
       )}
 
+      {legacyLiteralLakeLine && (
+        <div className="flex gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <div className="flex-1 space-y-2">
+            <p className="text-xs text-amber-900">
+              dbt_project.yml pins <code>+database: lake</code> literally, but this project has a
+              target that isn&apos;t dbt-duckdb. Only dbt-duckdb can attach the DuckLake catalog, so
+              every build against that target fails with &quot;Catalog &apos;lake&apos; was not
+              found&quot;. Switch it to a target-conditional expression so a duckdb target still
+              writes into the lake and every other target keeps its own database.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => save({ buildIntoLake: true })}
+              disabled={busy}
+            >
+              Fix dbt_project.yml
+            </Button>
+          </div>
+        </div>
+      )}
+
       <section className="space-y-2">
         <label className="flex items-start gap-2 text-sm">
           <input
@@ -117,9 +177,10 @@ export default function LakehousePanel({
           <span>
             <span className="font-medium text-gray-700">Build models into the lakehouse</span>
             <span className="block text-xs text-gray-500">
-              Adds <code>+database: lake</code> to dbt_project.yml. Without it dbt reads the lake but
-              writes its models to the warehouse file instead, which looks like the marts going
-              missing.
+              Adds <code>+database: lake</code> to dbt_project.yml — or, when this project has a
+              target that isn&apos;t dbt-duckdb, a target-conditional expression so only the duckdb
+              target attaches the lake. Without it dbt reads the lake but writes its models to the
+              warehouse file instead, which looks like the marts going missing.
             </span>
           </span>
         </label>

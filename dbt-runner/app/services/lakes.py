@@ -326,8 +326,12 @@ async def test_lake(lake: LakeRef) -> Dict[str, Any]:
 # hand.
 
 _MODELS_KEY_RE = re.compile(r"^models:\s*$")
+_CONDITIONAL_LAKE_DATABASE = (
+    '"{{ \'lake\' if target.type == \'duckdb\' else target.database }}"'
+)
 _LAKE_DATABASE_LINE_RE = re.compile(
-    rf"""^\s*\+?database:\s*['"]?{lakehouse.ATTACH_ALIAS}['"]?\s*$"""
+    rf"^\s*\+?database:\s*(?:['\"]?{lakehouse.ATTACH_ALIAS}['\"]?|"
+    rf"{re.escape(_CONDITIONAL_LAKE_DATABASE)})\s*$"
 )
 
 
@@ -345,8 +349,10 @@ def builds_into_lake(project_path: Path) -> bool:
     return any(_LAKE_DATABASE_LINE_RE.match(line) for line in content.splitlines())
 
 
-def set_builds_into_lake(project_path: Path, enabled: bool) -> bool:
-    """Add or remove `+database: lake` under the project's `models:` key.
+def set_builds_into_lake(
+    project_path: Path, enabled: bool, has_non_duckdb_target: bool
+) -> bool:
+    """Add or remove the lake database setting under the project's `models:` key.
 
     A line edit rather than a YAML round trip: dbt_project.yml ships full of
     comments explaining each key, and safe_load/safe_dump would silently delete
@@ -370,9 +376,15 @@ def set_builds_into_lake(project_path: Path, enabled: bool) -> bool:
         return True
 
     if removed:
-        # It was already there; rewriting it in the canonical place is still the
-        # right outcome, but nothing changed for the user.
+        # Rewriting an old literal is intentional: enabling again is the repair
+        # path after a non-DuckDB target has been added to the project.
         lines = kept
+
+    database = (
+        _CONDITIONAL_LAKE_DATABASE
+        if has_non_duckdb_target
+        else lakehouse.ATTACH_ALIAS
+    )
 
     # The first key under `models:` is the project's own name. Anything nested
     # deeper (staging:, marts:) inherits from it, which is why the pin belongs
@@ -388,7 +400,7 @@ def set_builds_into_lake(project_path: Path, enabled: bool) -> bool:
             indent = len(candidate) - len(candidate.lstrip())
             if indent == 0:
                 break  # `models:` had no children; fall through to the error
-            lines.insert(offset + 1, f"{' ' * (indent + 2)}+database: {lakehouse.ATTACH_ALIAS}\n")
+            lines.insert(offset + 1, f"{' ' * (indent + 2)}+database: {database}\n")
             path.write_text("".join(lines))
             return True
         break

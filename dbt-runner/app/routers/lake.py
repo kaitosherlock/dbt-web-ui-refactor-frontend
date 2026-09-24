@@ -288,6 +288,28 @@ def _warehouse_supports_lake(record: Any) -> bool:
     return not row.get("dremio_source_id")
 
 
+async def _project_has_non_duckdb_target(
+    session: AsyncSession, project_id: str
+) -> bool:
+    """Whether the dev or any additional project target is not DuckDB."""
+    result = await session.execute(
+        text(
+            "SELECT EXISTS ("
+            "  SELECT 1 FROM dbt_projects p "
+            "  JOIN connections c ON c.id = p.connection_id "
+            "  WHERE p.id = CAST(:pid AS uuid) AND c.connection_type <> 'duckdb' "
+            "  UNION ALL "
+            "  SELECT 1 FROM project_targets t "
+            "  JOIN connections c ON c.id = t.connection_id "
+            "  WHERE t.project_id = CAST(:pid AS uuid) "
+            "    AND c.connection_type <> 'duckdb'"
+            ")"
+        ),
+        {"pid": project_id},
+    )
+    return bool(result.scalar_one())
+
+
 @router.get("/lakehouse/project/{project_id}")
 async def get_project_lakehouse(
     project_id: str,
@@ -381,8 +403,14 @@ async def set_project_lakehouse(
     if request.build_into_lake is not None:
         project_path = project_service.get_path_or_raise(project_id)
         try:
+            has_non_duckdb_target = await _project_has_non_duckdb_target(
+                session, project_id
+            )
             changed = await asyncio.to_thread(
-                lakes.set_builds_into_lake, project_path, request.build_into_lake
+                lakes.set_builds_into_lake,
+                project_path,
+                request.build_into_lake,
+                has_non_duckdb_target,
             )
         except lakehouse.LakehouseError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

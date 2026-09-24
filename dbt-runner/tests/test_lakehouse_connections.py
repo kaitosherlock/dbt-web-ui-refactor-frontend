@@ -21,6 +21,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.host_guard import HostNotAllowed
+from app.routers import lake as lake_router
 from app.services import lakes
 from ingest import lakehouse
 from ingest.lakehouse import LakeRef, LakehouseError
@@ -292,32 +293,64 @@ models:
     def _text(self) -> str:
         return (self.root / "dbt_project.yml").read_text()
 
-    def test_enabling_pins_models_at_the_lake(self):
+    def test_enabling_with_only_duckdb_targets_pins_models_at_the_lake(self):
         self.assertFalse(lakes.builds_into_lake(self.root))
-        self.assertTrue(lakes.set_builds_into_lake(self.root, True))
+        self.assertTrue(lakes.set_builds_into_lake(self.root, True, False))
         self.assertTrue(lakes.builds_into_lake(self.root))
         self.assertIn("    +database: lake", self._text())
 
+    def test_enabling_with_a_non_duckdb_target_uses_a_target_conditional(self):
+        self.assertTrue(lakes.set_builds_into_lake(self.root, True, True))
+        self.assertIn(
+            '    +database: "{{ \'lake\' if target.type == \'duckdb\' '
+            'else target.database }}"',
+            self._text(),
+        )
+
     def test_the_pin_lands_under_the_project_key_so_every_model_inherits(self):
-        lakes.set_builds_into_lake(self.root, True)
+        lakes.set_builds_into_lake(self.root, True, False)
         lines = self._text().splitlines()
         models = lines.index("models:")
         self.assertEqual(lines[models + 1].strip(), "shop:")
         self.assertEqual(lines[models + 2], "    +database: lake")
 
-    def test_disabling_removes_it(self):
-        lakes.set_builds_into_lake(self.root, True)
-        self.assertTrue(lakes.set_builds_into_lake(self.root, False))
-        self.assertFalse(lakes.builds_into_lake(self.root))
-        self.assertNotIn("+database", self._text())
+    def test_reenabling_rewrites_a_literal_for_non_duckdb_targets(self):
+        lakes.set_builds_into_lake(self.root, True, False)
+        self.assertTrue(lakes.set_builds_into_lake(self.root, True, True))
+        self.assertNotIn("    +database: lake\n", self._text())
+        self.assertIn("else target.database", self._text())
+
+    def test_disabling_removes_literal_and_conditional_forms(self):
+        for has_non_duckdb_target in (False, True):
+            with self.subTest(has_non_duckdb_target=has_non_duckdb_target):
+                (self.root / "dbt_project.yml").write_text(self.PROJECT_YML)
+                lakes.set_builds_into_lake(
+                    self.root, True, has_non_duckdb_target
+                )
+                self.assertTrue(
+                    lakes.set_builds_into_lake(
+                        self.root, False, has_non_duckdb_target
+                    )
+                )
+                self.assertFalse(lakes.builds_into_lake(self.root))
+                self.assertNotIn("+database", self._text())
+
+    def test_get_detection_recognises_literal_and_conditional_forms(self):
+        for has_non_duckdb_target in (False, True):
+            with self.subTest(has_non_duckdb_target=has_non_duckdb_target):
+                (self.root / "dbt_project.yml").write_text(self.PROJECT_YML)
+                lakes.set_builds_into_lake(
+                    self.root, True, has_non_duckdb_target
+                )
+                self.assertTrue(lakes.builds_into_lake(self.root))
 
     def test_disabling_twice_changes_nothing(self):
-        self.assertFalse(lakes.set_builds_into_lake(self.root, False))
+        self.assertFalse(lakes.set_builds_into_lake(self.root, False, False))
 
     def test_comments_survive(self):
         """A YAML round trip would delete every comment dbt ships in this file."""
-        lakes.set_builds_into_lake(self.root, True)
-        lakes.set_builds_into_lake(self.root, False)
+        lakes.set_builds_into_lake(self.root, True, False)
+        lakes.set_builds_into_lake(self.root, False, False)
         self.assertIn(
             "# These configurations specify where dbt should look", self._text()
         )
@@ -326,7 +359,43 @@ models:
     def test_a_file_with_no_models_block_says_so(self):
         (self.root / "dbt_project.yml").write_text("name: 'shop'\nprofile: 'shop'\n")
         with self.assertRaises(LakehouseError):
-            lakes.set_builds_into_lake(self.root, True)
+            lakes.set_builds_into_lake(self.root, True, False)
+
+
+class ProjectTargetTypeTest(unittest.IsolatedAsyncioTestCase):
+    class _Result:
+        def __init__(self, value):
+            self.value = value
+
+        def scalar_one(self):
+            return self.value
+
+    class _Session:
+        def __init__(self, value):
+            self.value = value
+            self.statement = None
+            self.params = None
+
+        async def execute(self, statement, params):
+            self.statement = str(statement)
+            self.params = params
+            return ProjectTargetTypeTest._Result(self.value)
+
+    async def test_checks_dev_and_additional_target_connection_types(self):
+        session = self._Session(True)
+        self.assertTrue(
+            await lake_router._project_has_non_duckdb_target(session, "project-id")
+        )
+        self.assertIn("p.connection_id", session.statement)
+        self.assertIn("project_targets", session.statement)
+        self.assertIn("c.connection_type <> 'duckdb'", session.statement)
+        self.assertEqual(session.params, {"pid": "project-id"})
+
+    async def test_all_duckdb_targets_return_false(self):
+        session = self._Session(False)
+        self.assertFalse(
+            await lake_router._project_has_non_duckdb_target(session, "project-id")
+        )
 
 
 if __name__ == "__main__":
