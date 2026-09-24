@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { getSession } from 'next-auth/react';
-import { getDbtRunnerUrl } from '@/common/api/client';
+import { getDbtRunnerUrl, extractDetailMessage } from '@/common/api/client';
 
 interface DbtRunEvent {
     type: 'started' | 'output' | 'completed' | 'error';
@@ -184,8 +184,27 @@ export function useDbtRunStream(options: UseDbtRunStreamOptions) {
                     signal: controller.signal,
                 });
 
-                if (!response.ok || !response.body) {
-                    emitMessage(stream, { type: 'error', error: `dbt runner returned ${response.status}` });
+                if (!response.ok) {
+                    let errorMessage = `dbt runner returned ${response.status}`;
+                    try {
+                        const text = await response.text();
+                        if (text) {
+                            try {
+                                const data = JSON.parse(text);
+                                errorMessage = extractDetailMessage(data) || text;
+                            } catch {
+                                errorMessage = text;
+                            }
+                        }
+                    } catch {
+                        // ignore and use default status message
+                    }
+                    emitMessage(stream, { type: 'error', error: errorMessage });
+                    return;
+                }
+
+                if (!response.body) {
+                    emitMessage(stream, { type: 'error', error: 'No response stream available' });
                     return;
                 }
 

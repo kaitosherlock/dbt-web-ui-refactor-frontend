@@ -66,6 +66,7 @@ export function useQueryPreviewState(restoredSession: Partial<DevelopSessionStat
   const [lineageLoading, setLineageLoading] = useState(false)
   const [lineageError, setLineageError] = useState<string | null>(restoredSession.lineageError ?? null)
   const [columnLineage, setColumnLineage] = useState<ColumnLineage>(restoredSession.columnLineage ?? {})
+  const [columnLineageError, setColumnLineageError] = useState<string | null>(restoredSession.columnLineageError ?? null)
 
   return {
     queryResults, setQueryResults,
@@ -83,5 +84,6 @@ export function useQueryPreviewState(restoredSession: Partial<DevelopSessionStat
     lineageLoading, setLineageLoading,
     lineageError, setLineageError,
     columnLineage, setColumnLineage,
+    columnLineageError, setColumnLineageError,
   }
 }

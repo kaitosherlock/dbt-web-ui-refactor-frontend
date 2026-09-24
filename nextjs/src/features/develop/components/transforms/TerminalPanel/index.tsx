@@ -12,6 +12,7 @@ import QueryResultsTable from '../../QueryResultsTable';
 import CompiledSQLView from '../../CompiledSQLView';
 import QueryPlanView from '../../QueryPlanView';
 import LineageView from '../../LineageView';
+import PanelErrorBoundary from '../../PanelErrorBoundary';
 
 type TerminalTabType = 'results' | 'lineage' | 'compiled' | 'queryPlan' | 'logs';
 type QueryPanelView = 'results' | 'plan';
@@ -54,7 +55,8 @@ interface TerminalPanelProps {
     compiledError: string | null;
     lineageNodes: LineageNode[];
     lineageEdges: LineageEdge[];
-    columnLineage: Record<string, { column: string; table: string; expression?: string }[]>;
+    columnLineage: Record<string, { column: string; table: string; expression?: string }[]> | unknown;
+    columnLineageError?: string | null;
     lineageLoading: boolean;
     lineageError: string | null;
     selectedFile: string | null;
@@ -99,6 +101,7 @@ export default function TerminalPanel({
     lineageNodes,
     lineageEdges,
     columnLineage,
+    columnLineageError,
     lineageLoading,
     lineageError,
     selectedFile,
@@ -311,117 +314,126 @@ export default function TerminalPanel({
                 {/* Tab Content */}
                 <div className="flex-1 overflow-hidden bg-white">
                     {currentTab === 'results' && (
-                        <div className="flex h-full min-h-0 flex-col bg-white">
-                            <div className="flex items-center gap-1 border-b border-[#E6E6E6] bg-[#FAF9F8] px-3 py-1.5">
-                                <button
-                                    onClick={() => onQueryPanelViewChange('results')}
-                                    className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${queryPanelView === 'results'
-                                        ? 'bg-white text-[#0078D4] shadow-sm ring-1 ring-[#D0D0D0]'
-                                        : 'text-[#616161] hover:bg-[#E6E6E6] hover:text-[#0078D4]'
-                                        }`}
-                                >
-                                    Results
-                                </button>
-                                <button
-                                    onClick={() => onQueryPanelViewChange('plan')}
-                                    className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${queryPanelView === 'plan'
-                                        ? 'bg-white text-[#0078D4] shadow-sm ring-1 ring-[#D0D0D0]'
-                                        : 'text-[#616161] hover:bg-[#E6E6E6] hover:text-[#0078D4]'
-                                        }`}
-                                >
-                                    Plan
-                                </button>
-                            </div>
-                            <div className="min-h-0 flex-1 overflow-hidden">
-                                {queryPanelView === 'results' ? (
-                                    <QueryResultsTable
-                                        data={queryResults.data}
-                                        columns={queryResults.columns}
-                                        columnTypes={queryResults.columnTypes}
-                                        rowCount={queryResults.rowCount}
-                                        executionTime={queryResults.executionTime}
-                                        isLoading={queryLoading}
-                                        error={queryError || undefined}
-                                        onCancel={onCancelCommand}
-                                    />
-                                ) : (
-                                    <QueryPlanView
-                                        adapter={queryPlan.adapter}
-                                        model={queryPlan.model}
-                                        mode={queryPlan.mode}
-                                        plan={queryPlan.plan}
-                                        signals={queryPlan.signals}
-                                        executionTime={queryPlan.executionTime}
-                                        isLoading={queryPlanLoading}
-                                        loadingStage={queryPlanLoadingStage || undefined}
-                                        error={queryPlanError || undefined}
-                                        onRefresh={onRefreshQueryPlan}
-                                        onViewCompiledSql={() => onTabChange('compiled')}
-                                    />
-                                )}
-                            </div>
-                        </div>
-                    )}
-                    {currentTab === 'lineage' && (
-                        <LineageView
-                            nodes={lineageNodes}
-                            edges={lineageEdges}
-                            columnLineage={columnLineage}
-                            currentModel={selectedFile?.split('/').pop()?.replace('.sql', '')}
-                            isLoading={lineageLoading}
-                            error={lineageError || undefined}
-                            onRefresh={onLoadLineage}
-                        />
-                    )}
-                    {currentTab === 'compiled' && (
-                        <CompiledSQLView
-                            sql={compiledSQL}
-                            isLoading={compiledLoading}
-                            error={compiledError || undefined}
-                        />
-                    )}
-                    {currentTab === 'logs' && (
-                        <div className="h-full flex flex-col bg-[#FAF9F8]">
-                            <div className="flex-1 overflow-auto p-3 font-mono text-sm">
-                                <TerminalOutput lines={terminalOutput} />
-                            </div>
-                            {/* Terminal Input - Light theme */}
-                            <form onSubmit={handleSubmit} className="px-3 py-2 bg-white border-t border-[#E6E6E6]">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[#038387] font-mono text-sm font-bold">$</span>
-                                    <input
-                                        type="text"
-                                        value={terminalInput}
-                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                                            setHistoryIndex(null);
-                                            onTerminalInputChange(e.target.value);
-                                        }}
-                                        onKeyDown={handleInputKeyDown}
-                                        placeholder={isCommandRunning ? "Press Ctrl+C to stop..." : "↑ for history · dbt run, dbt compile, dbt test..."}
-                                        className="flex-1 bg-[#FAF9F8] border border-[#E6E6E6] rounded px-3 py-1.5 font-mono text-sm text-[#242424] focus:outline-none focus:border-[#0078D4]"
-                                        disabled={isCommandRunning}
-                                    />
-                                    {isCommandRunning ? (
-                                        <button
-                                            type="button"
-                                            onClick={onCancelCommand}
-                                            className="px-3 py-1.5 bg-[#D32F2F] text-white text-sm rounded hover:bg-[#B71C1C] flex items-center gap-1"
-                                        >
-                                            <XCircle className="h-4 w-4" /> Stop
-                                        </button>
+                        <PanelErrorBoundary panelName="Query" resetKey={`${currentTab}-${queryPanelView}`}>
+                            <div className="flex h-full min-h-0 flex-col bg-white">
+                                <div className="flex items-center gap-1 border-b border-[#E6E6E6] bg-[#FAF9F8] px-3 py-1.5">
+                                    <button
+                                        onClick={() => onQueryPanelViewChange('results')}
+                                        className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${queryPanelView === 'results'
+                                            ? 'bg-white text-[#0078D4] shadow-sm ring-1 ring-[#D0D0D0]'
+                                            : 'text-[#616161] hover:bg-[#E6E6E6] hover:text-[#0078D4]'
+                                            }`}
+                                    >
+                                        Results
+                                    </button>
+                                    <button
+                                        onClick={() => onQueryPanelViewChange('plan')}
+                                        className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${queryPanelView === 'plan'
+                                            ? 'bg-white text-[#0078D4] shadow-sm ring-1 ring-[#D0D0D0]'
+                                            : 'text-[#616161] hover:bg-[#E6E6E6] hover:text-[#0078D4]'
+                                            }`}
+                                    >
+                                        Plan
+                                    </button>
+                                </div>
+                                <div className="min-h-0 flex-1 overflow-hidden">
+                                    {queryPanelView === 'results' ? (
+                                        <QueryResultsTable
+                                            data={queryResults.data}
+                                            columns={queryResults.columns}
+                                            columnTypes={queryResults.columnTypes}
+                                            rowCount={queryResults.rowCount}
+                                            executionTime={queryResults.executionTime}
+                                            isLoading={queryLoading}
+                                            error={queryError || undefined}
+                                            onCancel={onCancelCommand}
+                                        />
                                     ) : (
-                                        <button type="submit" className="px-3 py-1.5 bg-[#0078D4] text-white text-sm rounded hover:bg-[#106EBE]">
-                                            Run
-                                        </button>
+                                        <QueryPlanView
+                                            adapter={queryPlan.adapter}
+                                            model={queryPlan.model}
+                                            mode={queryPlan.mode}
+                                            plan={queryPlan.plan}
+                                            signals={queryPlan.signals}
+                                            executionTime={queryPlan.executionTime}
+                                            isLoading={queryPlanLoading}
+                                            loadingStage={queryPlanLoadingStage || undefined}
+                                            error={queryPlanError || undefined}
+                                            onRefresh={onRefreshQueryPlan}
+                                            onViewCompiledSql={() => onTabChange('compiled')}
+                                        />
                                     )}
                                 </div>
-                                {isCommandRunning && (
-                                    <div className="text-xs text-[#616161] mt-1 flex items-center gap-1">
-                                        <span className="animate-pulse text-[#0078D4]">●</span> Running... Press Ctrl+C or click Stop to cancel
+                            </div>
+                        </PanelErrorBoundary>
+                    )}
+                    {currentTab === 'lineage' && (
+                        <PanelErrorBoundary panelName="Lineage" resetKey={currentTab}>
+                            <LineageView
+                                nodes={lineageNodes}
+                                edges={lineageEdges}
+                                columnLineage={columnLineage}
+                                columnLineageError={columnLineageError}
+                                currentModel={selectedFile?.split('/').pop()?.replace('.sql', '')}
+                                isLoading={lineageLoading}
+                                error={lineageError || undefined}
+                                onRefresh={onLoadLineage}
+                            />
+                        </PanelErrorBoundary>
+                    )}
+                    {currentTab === 'compiled' && (
+                        <PanelErrorBoundary panelName="Compiled SQL" resetKey={currentTab}>
+                            <CompiledSQLView
+                                sql={compiledSQL}
+                                isLoading={compiledLoading}
+                                error={compiledError || undefined}
+                            />
+                        </PanelErrorBoundary>
+                    )}
+                    {currentTab === 'logs' && (
+                        <PanelErrorBoundary panelName="Terminal" resetKey={currentTab}>
+                            <div className="h-full flex flex-col bg-[#FAF9F8]">
+                                <div className="flex-1 overflow-auto p-3 font-mono text-sm">
+                                    <TerminalOutput lines={terminalOutput} />
+                                </div>
+                                {/* Terminal Input - Light theme */}
+                                <form onSubmit={handleSubmit} className="px-3 py-2 bg-white border-t border-[#E6E6E6]">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[#038387] font-mono text-sm font-bold">$</span>
+                                        <input
+                                            type="text"
+                                            value={terminalInput}
+                                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                                setHistoryIndex(null);
+                                                onTerminalInputChange(e.target.value);
+                                            }}
+                                            onKeyDown={handleInputKeyDown}
+                                            placeholder={isCommandRunning ? "Press Ctrl+C to stop..." : "↑ for history · dbt run, dbt compile, dbt test..."}
+                                            className="flex-1 bg-[#FAF9F8] border border-[#E6E6E6] rounded px-3 py-1.5 font-mono text-sm text-[#242424] focus:outline-none focus:border-[#0078D4]"
+                                            disabled={isCommandRunning}
+                                        />
+                                        {isCommandRunning ? (
+                                            <button
+                                                type="button"
+                                                onClick={onCancelCommand}
+                                                className="px-3 py-1.5 bg-[#D32F2F] text-white text-sm rounded hover:bg-[#B71C1C] flex items-center gap-1"
+                                            >
+                                                <XCircle className="h-4 w-4" /> Stop
+                                            </button>
+                                        ) : (
+                                            <button type="submit" className="px-3 py-1.5 bg-[#0078D4] text-white text-sm rounded hover:bg-[#106EBE]">
+                                                Run
+                                            </button>
+                                        )}
                                     </div>
-                                )}
-                            </form>
-                        </div>
+                                    {isCommandRunning && (
+                                        <div className="text-xs text-[#616161] mt-1 flex items-center gap-1">
+                                            <span className="animate-pulse text-[#0078D4]">●</span> Running... Press Ctrl+C or click Stop to cancel
+                                        </div>
+                                    )}
+                                </form>
+                            </div>
+                        </PanelErrorBoundary>
                     )}
                 </div>
             </div>

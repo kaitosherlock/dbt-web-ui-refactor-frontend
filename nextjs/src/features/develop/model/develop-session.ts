@@ -44,6 +44,7 @@ export interface DevelopSessionState {
   lineageEdges: { from: string; to: string }[];
   lineageError: string | null;
   columnLineage: Record<string, { column: string; table: string; expression?: string }[]>;
+  columnLineageError?: string | null;
   openTabs: {
     path: string;
     name: string;

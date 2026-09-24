@@ -159,7 +159,7 @@ function buildUrl(url: string, params?: RequestOptions['params']): string {
 }
 
 /** FastAPI details come as a string, a `{message, …}` object, or a validation array. */
-function extractDetailMessage(data: unknown): string | undefined {
+export function extractDetailMessage(data: unknown): string | undefined {
     if (!data || typeof data !== 'object') return undefined
     const detail = (data as Record<string, unknown>).detail
     if (typeof detail === 'string') return detail

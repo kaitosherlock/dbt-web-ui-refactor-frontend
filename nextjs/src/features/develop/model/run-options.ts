@@ -420,3 +420,16 @@ export function resolveStateTargets({
     hasState,
   }
 }
+
+/**
+ * Strips model selection flags (`--select <model>`, `-s <model>`, etc.) from a command string.
+ * Used when a named selector (`--selector`) is active, because dbt-runner refuses
+ * both `--select` and `--selector` in the same execution (400 Bad Request).
+ */
+export function stripModelSelection(command: string): string {
+  return command
+    .replace(/(?:--select|-s)(?:\s+|=)(?:'[^']*'|"[^"]*"|[^\s]+)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+

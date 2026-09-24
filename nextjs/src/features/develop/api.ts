@@ -89,6 +89,7 @@ export interface DbtCommandResponse {
     stdout: string;
     stderr: string;
     returncode: number;
+    error?: string;
 }
 
 export interface DbtCompileRequest {
@@ -156,6 +157,7 @@ export interface DbtLineageResponse {
         edges: { from: string; to: string }[];
     };
     column_lineage: Record<string, { column: string; table: string; expression?: string }[]>;
+    column_lineage_error?: string;
     error?: string;
 }
 

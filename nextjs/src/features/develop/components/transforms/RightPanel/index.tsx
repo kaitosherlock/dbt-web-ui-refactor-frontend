@@ -37,6 +37,7 @@ interface RightPanelProps {
     hasActiveRunOptions?: boolean;
     hasState?: boolean;
     stateTarget?: string;
+    selectorName?: string;
 }
 
 export default function RightPanel({
@@ -64,6 +65,7 @@ export default function RightPanel({
     hasActiveRunOptions = false,
     hasState,
     stateTarget = 'dev',
+    selectorName,
 }: RightPanelProps) {
     const [dbtMenuOpen, setDbtMenuOpen] = useState(false);
 
@@ -93,16 +95,34 @@ export default function RightPanel({
                         <div className="absolute right-full top-0 mr-1 w-56 bg-white border border-[#E6E6E6] rounded-lg shadow-lg z-50 overflow-hidden">
                             {/* Current Model Section */}
                             <div className="border-b border-[#E6E6E6]">
-                                <div className="px-3 py-2 bg-[#FAF9F8] text-xs font-semibold text-[#323130] uppercase tracking-wide">
-                                    Current Model
+                                <div className="px-3 py-2 bg-[#FAF9F8] text-xs font-semibold text-[#323130] uppercase tracking-wide flex items-center justify-between">
+                                    <span>Current Model</span>
+                                    {selectorName && (
+                                        <span className="text-[10px] text-blue-600 font-normal normal-case">
+                                            selector active
+                                        </span>
+                                    )}
                                 </div>
+                                {selectorName && (
+                                    <div className="px-3 py-1.5 bg-blue-50 text-[11px] text-blue-800 border-b border-blue-100">
+                                        Named selector &lsquo;{selectorName}&rsquo; replaces model selection.
+                                    </div>
+                                )}
                                 <div className="py-1">
                                     <button
-                                        onClick={() => { onRunDbt(`run --select ${getModelName()}`); setDbtMenuOpen(false); }}
+                                        onClick={() => {
+                                            onRunDbt(selectorName ? "run" : `run --select ${getModelName()}`);
+                                            setDbtMenuOpen(false);
+                                        }}
                                         className="w-full px-3 py-2 text-sm text-left hover:bg-[#F3F2F1] flex items-center gap-2"
+                                        title={
+                                            selectorName
+                                                ? `Run with selector '${selectorName}'`
+                                                : `Run ${getModelName()}`
+                                        }
                                     >
                                         <Play className="h-4 w-4 text-[#0078D4]" />
-                                        <span>Run</span>
+                                        <span>{selectorName ? `Run (${selectorName})` : "Run"}</span>
                                     </button>
                                     <button
                                         onClick={() => { onRunDbt(`run --select +${getModelName()}`); setDbtMenuOpen(false); }}

@@ -36,7 +36,9 @@ import {
   hasActiveRunOptions,
   loadRunOptions,
   saveRunOptions,
+  stripModelSelection,
 } from "../model/run-options";
+import { normalizeColumnLineage } from "../model/lineage";
 import { RunOptionsDialog } from "./RunOptionsDialog";
 import { ListResourcesDialog } from "./ListResourcesDialog";
 import { RunOperationDialog } from "./RunOperationDialog";
@@ -233,6 +235,7 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
     lineageLoading, setLineageLoading,
     lineageError, setLineageError,
     columnLineage, setColumnLineage,
+    columnLineageError, setColumnLineageError,
   } = useQueryPreviewState(restoredSession);
 
   const [openTabs, setOpenTabs] = useState<OpenTab[]>(restoredSession.openTabs ?? []);
@@ -555,6 +558,7 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
     setLineageEdges(restored.lineageEdges ?? []);
     setLineageError(restored.lineageError ?? null);
     setColumnLineage(restored.columnLineage ?? {});
+    setColumnLineageError(restored.columnLineageError ?? null);
     setOpenTabs(restored.openTabs ?? []);
     setActiveTabPath(restored.activeTabPath ?? null);
     setExpandedPaths(new Set(restored.expandedPaths ?? []));
@@ -584,6 +588,7 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
     projectId,
     userId,
     setColumnLineage,
+    setColumnLineageError,
     setCompiledError,
     setCompiledSQL,
     setExpandedPaths,
@@ -637,17 +642,20 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
   }, [projectId, userId, runOptions]);
 
   // Load project targets and state targets
+  const refreshStateTargets = useCallback(async () => {
+    if (!projectId) return;
+    try {
+      const res = await dbtApi.listState(projectId);
+      if (res?.targets) setStateTargets(res.targets);
+    } catch {
+      // ignore
+    }
+  }, [projectId]);
+
   useEffect(() => {
     if (!projectId) return;
     let isMounted = true;
-    void dbtApi
-      .listState(projectId)
-      .then((res) => {
-        if (isMounted && res?.targets) setStateTargets(res.targets);
-      })
-      .catch(() => {
-        if (isMounted) setStateTargets([]);
-      });
+    void refreshStateTargets();
     void getProjectTargets(projectId)
       .then((targets) => {
         if (isMounted && targets) setProjectTargetNames(targets.map((t) => t.name));
@@ -658,7 +666,7 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
     return () => {
       isMounted = false;
     };
-  }, [projectId]);
+  }, [projectId, refreshStateTargets]);
 
   const effectiveStateTarget = runOptions.state_target || dbtTarget || DEFAULT_DBT_TARGET;
   const hasStateForTarget = Boolean(
@@ -690,6 +698,7 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
       lineageEdges,
       lineageError,
       columnLineage,
+      columnLineageError,
       openTabs,
       activeTabPath,
       expandedPaths: [...expandedPaths],
@@ -720,6 +729,7 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
     lineageEdges,
     lineageError,
     columnLineage,
+    columnLineageError,
     openTabs,
     activeTabPath,
     expandedPaths,
@@ -794,6 +804,13 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
         const command = activeDbtCommandRef.current;
         if (command && /^(parse|compile|docs|build|run)\b/.test(command)) {
           void refreshDbtIntellisense();
+        }
+        if (command && /^build\b/.test(command)) {
+          const targetMatch = command.match(/--target\s+(\S+)/);
+          const target = targetMatch ? targetMatch[1] : dbtTarget;
+          if (target && target !== "dev" && target !== "default") {
+            void refreshStateTargets();
+          }
         }
       } else {
         setTerminalOutput((prev) => [...prev, `[ERROR] Command failed with exit code ${returncode}`]);
@@ -1040,15 +1057,19 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
   const handleRunDbt = async (command: string, customOptions?: Partial<RunOptionsState>) => {
     if (!claimCommandSlot()) return;
     const dbtEnvironment = toEnvironmentPayload(environmentVariables);
-    // Send options as request fields, never as raw CLI flags in command string.
-    // Keep --target appended only in buildDbtCommandWithArgs.
-    const commandWithTarget = buildDbtCommandWithArgs(command, "", false, dbtTarget);
     const effectiveOptions: RunOptionsState = {
       ...runOptions,
       full_refresh: dbtFullRefresh || runOptions.full_refresh,
       ...(customOptions || {}),
     };
     const optionsPayload = buildRunOptionsPayload(effectiveOptions, command);
+    // When selector_name is set, strip model selection from command (backend 400s if both are sent)
+    const resolvedCommand = optionsPayload.selector_name
+      ? stripModelSelection(command)
+      : command;
+    // Send options as request fields, never as raw CLI flags in command string.
+    // Keep --target appended only in buildDbtCommandWithArgs.
+    const commandWithTarget = buildDbtCommandWithArgs(resolvedCommand, "", false, dbtTarget);
 
     setTerminalOpen(true);
     setTerminalTab("logs");
@@ -1076,6 +1097,13 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
           if (/^(parse|compile|docs|build|run)\b/.test(commandWithTarget)) {
             await refreshDbtIntellisense();
           }
+          if (/^build\b/.test(commandWithTarget)) {
+            const targetMatch = commandWithTarget.match(/--target\s+(\S+)/);
+            const target = targetMatch ? targetMatch[1] : dbtTarget;
+            if (target && target !== "dev" && target !== "default") {
+              void refreshStateTargets();
+            }
+          }
         } else {
           if (data.stderr)
             setTerminalOutput((prev) => [
@@ -1089,11 +1117,16 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
               "--- STDOUT ---",
               ...data.stdout.split("\n").filter((l: string) => l.trim()),
             ]);
+          if (data.error)
+            setTerminalOutput((prev) => [
+              ...prev,
+              `[ERROR] ${data.error}`,
+            ]);
         }
       } catch (err) {
         setTerminalOutput((prev) => [
           ...prev,
-          `Error: ${(err as Error).message || "Network error"}`,
+          `[ERROR] ${(err as Error).message || "Network error"}`,
         ]);
       } finally {
         setIsCommandRunning(false);
@@ -1227,6 +1260,7 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
     }
     setLineageLoading(true);
     setLineageError(null);
+    setColumnLineageError(null);
     try {
       const data = await dbtApi.getLineage(projectId, selectedFile);
       setLineageLoading(false);
@@ -1238,7 +1272,9 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
           }))
         );
         setLineageEdges(data.table_lineage?.edges || []);
-        setColumnLineage(data.column_lineage || {});
+        const normalized = normalizeColumnLineage(data.column_lineage, data.column_lineage_error);
+        setColumnLineage(normalized.columnLineage);
+        setColumnLineageError(normalized.columnLineageError);
       } else {
         setLineageError(data.error || "Failed to load lineage");
       }
@@ -1352,7 +1388,11 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
       return;
     }
     const modelName = targetFile.split("/").pop()?.replace(".sql", "") || "";
-    await handleRunDbt(`run --select ${modelName}`);
+    if (runOptions.selector_name?.trim()) {
+      await handleRunDbt("run");
+    } else {
+      await handleRunDbt(`run --select ${modelName}`);
+    }
   };
 
 
@@ -2154,6 +2194,7 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
             intellisenseLoading={intellisenseLoading}
             intellisenseError={intellisenseError}
             diffRequest={diffRequest}
+            selectorName={runOptions.selector_name?.trim() || undefined}
           />
 
           {/* Terminal Panel */}
@@ -2174,6 +2215,7 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
             lineageNodes={lineageNodes}
             lineageEdges={lineageEdges}
             columnLineage={columnLineage}
+            columnLineageError={columnLineageError}
             lineageLoading={lineageLoading}
             lineageError={lineageError}
             selectedFile={selectedFile}
@@ -2238,6 +2280,7 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
           hasActiveRunOptions={hasActiveRunOptions(runOptions)}
           hasState={hasStateForTarget}
           stateTarget={effectiveStateTarget}
+          selectorName={runOptions.selector_name?.trim() || undefined}
         />
       </div>
 
@@ -2247,6 +2290,8 @@ export default function DevelopLayout({ projectId }: DevelopLayoutProps) {
         projectId={projectId}
         activeTarget={dbtTarget}
         availableTargets={projectTargetNames}
+        stateTargets={stateTargets}
+        onRefreshState={refreshStateTargets}
         runOptions={runOptions}
         onOptionsChange={(newOptions) => {
           setRunOptions(newOptions);

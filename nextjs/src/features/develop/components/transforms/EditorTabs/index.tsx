@@ -50,6 +50,7 @@ interface EditorTabsProps {
     intellisenseLoading?: boolean;
     intellisenseError?: string | null;
     diffRequest?: { path: string; requestId: number } | null;
+    selectorName?: string;
 }
 
 export default function EditorTabs({
@@ -82,6 +83,7 @@ export default function EditorTabs({
     intellisenseLoading = false,
     intellisenseError,
     diffRequest,
+    selectorName,
 }: EditorTabsProps) {
     const [showDiff, setShowDiff] = useState(false);
 
@@ -276,9 +278,13 @@ export default function EditorTabs({
                                     <button
                                         onClick={onRun}
                                         className="p-1.5 hover:bg-[#E6E6E6] rounded flex items-center gap-1 text-sm text-[#038387] transition-colors"
-                                        title="Run Model (Ctrl+Shift+Enter / Cmd+Shift+Enter)"
+                                        title={
+                                            selectorName
+                                                ? `Run with selector '${selectorName}' (replaces current model selection)`
+                                                : "Run Model (Ctrl+Shift+Enter / Cmd+Shift+Enter)"
+                                        }
                                     >
-                                        <PlayCircle className="h-4 w-4" /> Run
+                                        <PlayCircle className="h-4 w-4" /> {selectorName ? `Run (${selectorName})` : "Run"}
                                     </button>
                                 </>
                             )}

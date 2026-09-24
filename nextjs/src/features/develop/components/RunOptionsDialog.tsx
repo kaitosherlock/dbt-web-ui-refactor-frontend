@@ -9,6 +9,7 @@ import {
   Layers,
   Loader2,
   Plus,
+  RefreshCw,
   SlidersHorizontal,
   Trash2,
   X,
@@ -35,6 +36,8 @@ interface RunOptionsDialogProps {
   projectId: string
   activeTarget: string
   availableTargets: string[]
+  stateTargets?: DbtRunStateTarget[]
+  onRefreshState?: () => Promise<void> | void
   runOptions: RunOptionsState
   onOptionsChange: (newOptions: RunOptionsState) => void
   onRunBuildModified?: (stateTarget: string) => void
@@ -49,6 +52,8 @@ export function RunOptionsDialog({
   projectId,
   activeTarget: _activeTarget,
   availableTargets,
+  stateTargets: propStateTargets,
+  onRefreshState,
   runOptions,
   onOptionsChange,
   onRunBuildModified,
@@ -59,8 +64,9 @@ export function RunOptionsDialog({
   const [varEntries, setVarEntries] = useState<VarEntry[]>([])
   const [availableSelectors, setAvailableSelectors] = useState<string[]>([])
   const [selectorsLoading, setSelectorsLoading] = useState(false)
-  const [stateTargets, setStateTargets] = useState<DbtRunStateTarget[]>([])
+  const [stateTargets, setStateTargets] = useState<DbtRunStateTarget[]>(propStateTargets || [])
   const [stateLoading, setStateLoading] = useState(false)
+  const [stateError, setStateError] = useState<string | null>(null)
   const [isCustomSelector, setIsCustomSelector] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
 
@@ -115,11 +121,19 @@ export function RunOptionsDialog({
     }
   }, [open, projectId, localOptions.selector_name])
 
+  // Keep state targets in sync with parent prop
+  useEffect(() => {
+    if (propStateTargets) {
+      setStateTargets(propStateTargets)
+    }
+  }, [propStateTargets])
+
   // Fetch dbt state targets
   useEffect(() => {
     if (!open) return
     let isMounted = true
     setStateLoading(true)
+    setStateError(null)
 
     async function loadState() {
       try {
@@ -127,8 +141,11 @@ export function RunOptionsDialog({
         if (isMounted && res?.targets) {
           setStateTargets(res.targets)
         }
-      } catch {
-        if (isMounted) setStateTargets([])
+      } catch (err) {
+        if (isMounted) {
+          setStateTargets([])
+          setStateError(err instanceof Error ? err.message : "Failed to load state targets")
+        }
       } finally {
         if (isMounted) setStateLoading(false)
       }
@@ -139,6 +156,24 @@ export function RunOptionsDialog({
       isMounted = false
     }
   }, [open, projectId])
+
+  const handleManualRefreshState = async () => {
+    setStateLoading(true)
+    setStateError(null)
+    try {
+      if (onRefreshState) {
+        await onRefreshState()
+      }
+      const res = await dbtApi.listState(projectId)
+      if (res?.targets) {
+        setStateTargets(res.targets)
+      }
+    } catch (err) {
+      setStateError(err instanceof Error ? err.message : "Failed to refresh state targets")
+    } finally {
+      setStateLoading(false)
+    }
+  }
 
   // Compute resolved state targets: non-dev targets + state targets from API, default to first with state
   const stateResolution = useMemo(
@@ -556,6 +591,14 @@ export function RunOptionsDialog({
                 {!selectorValidation.valid && (
                   <p className="mt-1 text-xs text-red-600">{selectorValidation.error}</p>
                 )}
+                {Boolean(localOptions.selector_name?.trim()) && (
+                  <div className="mt-2 flex items-center gap-1.5 rounded bg-blue-50 px-2.5 py-1.5 text-xs text-blue-700">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+                    <span>
+                      Setting a named selector replaces the current model selection (<code>--select</code>).
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -663,7 +706,7 @@ export function RunOptionsDialog({
                 <label htmlFor="state-target-select" className="block text-xs font-medium text-gray-700">
                   State Target (<code className="text-xs">--state</code>)
                 </label>
-                <div className="mt-1.5 flex items-center gap-3">
+                <div className="mt-1.5 flex items-center gap-2">
                   <select
                     id="state-target-select"
                     value={selectedStateTarget}
@@ -690,6 +733,18 @@ export function RunOptionsDialog({
                     )}
                   </select>
 
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void handleManualRefreshState()}
+                    disabled={stateLoading}
+                    title="Refresh state targets"
+                    className="h-8 w-8 p-0 text-gray-500 hover:text-gray-700"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${stateLoading ? "animate-spin" : ""}`} />
+                  </Button>
+
                   {/* Status indicator */}
                   {stateLoading ? (
                     <div className="flex items-center gap-1 text-xs text-gray-500">
@@ -707,6 +762,10 @@ export function RunOptionsDialog({
                     </div>
                   )}
                 </div>
+
+                {stateError && (
+                  <p className="mt-1.5 text-xs text-red-600">{stateError}</p>
+                )}
 
                 {currentTargetState && (
                   <p className="mt-1 text-xs text-gray-500">

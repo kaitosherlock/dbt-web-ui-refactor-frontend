@@ -9,6 +9,7 @@ import {
   buildRunOptionsPayload,
   hasActiveRunOptions,
   resolveStateTargets,
+  stripModelSelection,
 } from "../src/features/develop/model/run-options"
 
 describe("run-options pure helpers", () => {
@@ -329,6 +330,35 @@ selectors:
       expect(res.candidateTargets).toEqual([])
       expect(res.selectedTarget).toBe("")
       expect(res.hasState).toBe(false)
+    })
+  })
+
+  describe("stripModelSelection", () => {
+    it("strips --select <model> from command", () => {
+      expect(stripModelSelection("run --select my_model")).toBe("run")
+      expect(stripModelSelection("run --select +my_model")).toBe("run")
+      expect(stripModelSelection("run --select my_model+")).toBe("run")
+    })
+
+    it("strips -s <model> from command", () => {
+      expect(stripModelSelection("run -s my_model")).toBe("run")
+      expect(stripModelSelection("test -s my_model")).toBe("test")
+    })
+
+    it("strips --select while preserving other flags like --limit or --target", () => {
+      expect(stripModelSelection("show --select my_model --limit 100")).toBe("show --limit 100")
+      expect(stripModelSelection("compile --select my_model --threads 4")).toBe("compile --threads 4")
+    })
+
+    it("strips quoted select values", () => {
+      expect(stripModelSelection("run --select 'tag:daily'")).toBe("run")
+      expect(stripModelSelection('run --select "tag:daily"')).toBe("run")
+    })
+
+    it("handles commands without --select unchanged", () => {
+      expect(stripModelSelection("run")).toBe("run")
+      expect(stripModelSelection("build")).toBe("build")
+      expect(stripModelSelection("test")).toBe("test")
     })
   })
 })

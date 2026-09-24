@@ -1,6 +1,17 @@
 import type { NextConfig } from "next";
 
-export function createSecurityHeaders(isProduction: boolean) {
+export interface SecurityHeadersOptions {
+  frameAncestors?: string;
+  xFrameOptions?: "DENY" | "SAMEORIGIN";
+}
+
+export function createSecurityHeaders(
+  isProduction: boolean,
+  options?: SecurityHeadersOptions,
+) {
+  const frameAncestors = options?.frameAncestors ?? "'none'";
+  const xFrameOptions = options?.xFrameOptions ?? "DENY";
+
   return [
     {
       key: "Content-Security-Policy",
@@ -19,13 +30,13 @@ export function createSecurityHeaders(isProduction: boolean) {
         "connect-src 'self' http://localhost:8080 http://127.0.0.1:8080 https:",
         "object-src 'none'",
         "base-uri 'self'",
-        "frame-ancestors 'none'",
+        `frame-ancestors ${frameAncestors}`,
         "form-action 'self'",
       ].join("; "),
     },
     { key: "X-Content-Type-Options", value: "nosniff" },
     { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-    { key: "X-Frame-Options", value: "DENY" },
+    { key: "X-Frame-Options", value: xFrameOptions },
     {
       key: "Permissions-Policy",
       value: "camera=(), geolocation=(), microphone=()",
@@ -41,7 +52,12 @@ export function createSecurityHeaders(isProduction: boolean) {
   ];
 }
 
-const securityHeaders = createSecurityHeaders(process.env.NODE_ENV === "production");
+const isProduction = process.env.NODE_ENV === "production";
+const securityHeaders = createSecurityHeaders(isProduction);
+const dbtDocsSecurityHeaders = createSecurityHeaders(isProduction, {
+  frameAncestors: "'self'",
+  xFrameOptions: "SAMEORIGIN",
+});
 
 const nextConfig: NextConfig = {
   // Enable standalone output for Docker production builds
@@ -53,6 +69,10 @@ const nextConfig: NextConfig = {
       {
         source: "/:path*",
         headers: securityHeaders,
+      },
+      {
+        source: "/api/dbt-docs/:path*",
+        headers: dbtDocsSecurityHeaders,
       },
     ];
   },
